@@ -117,6 +117,11 @@
         <span id="project-name-label" class="text-xs text-muted"
           >Sem projeto</span
         >
+        <span
+          id="project-save-status"
+          class="text-xs"
+          style="color: var(--text-disabled)"
+        ></span>
 
         <!-- Header center spacer -->
         <div style="flex: 1"></div>
@@ -398,18 +403,37 @@
                   </div>
                 </div>
                 <div class="prop-row">
-                  <span class="prop-label">Alcance</span>
+                  <span class="prop-label">Alcance De</span>
                   <div class="prop-controls" style="gap: 6px">
                     <input
-                      id="prop-grad-reach"
+                      id="prop-grad-from-reach"
                       type="range"
                       class="slider"
-                      min="1"
+                      min="0"
+                      max="100"
+                      value="0"
+                      style="flex: 1"
+                    />
+                    <span
+                      id="prop-grad-from-reach-val"
+                      class="text-xs text-muted"
+                      >0%</span
+                    >
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Alcance Para</span>
+                  <div class="prop-controls" style="gap: 6px">
+                    <input
+                      id="prop-grad-to-reach"
+                      type="range"
+                      class="slider"
+                      min="0"
                       max="100"
                       value="100"
                       style="flex: 1"
                     />
-                    <span id="prop-grad-reach-val" class="text-xs text-muted"
+                    <span id="prop-grad-to-reach-val" class="text-xs text-muted"
                       >100%</span
                     >
                   </div>
@@ -475,6 +499,69 @@
               </div>
               <div id="sidebar-fonts">
                 <!-- Rendered by brand manager -->
+              </div>
+            </div>
+
+            <!-- Brand identity for AI -->
+            <div class="sidebar-section">
+              <div class="sidebar-section-header">
+                <span class="sidebar-section-title">Identidade para IA</span>
+                <button
+                  id="btn-save-brand-identity"
+                  class="btn btn-ghost btn-sm"
+                  title="Salvar"
+                >
+                  ✓
+                </button>
+              </div>
+              <div
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  gap: 6px;
+                  padding-bottom: 4px;
+                "
+              >
+                <div>
+                  <label class="label" style="font-size: 10px"
+                    >Fonte principal da marca</label
+                  >
+                  <input
+                    id="brand-primary-font"
+                    class="input input-sm"
+                    placeholder="Ex: Montserrat, Inter, Poppins"
+                  />
+                </div>
+                <div>
+                  <label class="label" style="font-size: 10px"
+                    >Fonte secundária</label
+                  >
+                  <input
+                    id="brand-secondary-font"
+                    class="input input-sm"
+                    placeholder="Ex: Playfair Display (opcional)"
+                  />
+                </div>
+                <div>
+                  <label class="label" style="font-size: 10px"
+                    >Tom de voz / estilo da marca</label
+                  >
+                  <input
+                    id="brand-voice"
+                    class="input input-sm"
+                    placeholder="Ex: profissional, inspirador, direto"
+                  />
+                </div>
+                <div>
+                  <label class="label" style="font-size: 10px"
+                    >Palavras-chave / valores</label
+                  >
+                  <input
+                    id="brand-keywords"
+                    class="input input-sm"
+                    placeholder="Ex: inovação, confiança, resultados"
+                  />
+                </div>
               </div>
             </div>
 
@@ -569,6 +656,13 @@
             </button>
           </div>
           <div class="canvas-toolbar-right">
+            <button
+              id="btn-apply-bg-all-slides"
+              class="btn btn-ghost btn-sm"
+              title="Aplicar o fundo deste slide em todos os slides do projeto"
+            >
+              Fundo → Todos
+            </button>
             <button
               id="btn-play-animation"
               class="btn btn-ghost btn-sm"
@@ -1499,6 +1593,49 @@
             </button>
 
             <button
+              id="btn-export-all-slides"
+              class="btn btn-primary"
+              style="justify-content: center"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Exportar todos os slides (.zip)
+            </button>
+
+            <div
+              style="
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                padding: 8px;
+                display: grid;
+                gap: 8px;
+              "
+            >
+              <label class="text-xs text-muted">Formatos no ZIP</label>
+              <div
+                id="export-format-options"
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px"
+              ></div>
+              <label class="text-xs text-muted">Tipo de mídia no ZIP</label>
+              <select id="export-zip-media-type" class="input input-sm">
+                <option value="png">PNG</option>
+                <option value="svg">SVG</option>
+                <option value="gif">GIF</option>
+                <option value="video">Vídeo (webm)</option>
+              </select>
+            </div>
+
+            <button
               id="btn-export-all-formats"
               class="btn"
               style="justify-content: center"
@@ -1515,7 +1652,21 @@
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              Exportar Todos os Formatos (.zip)
+              Exportar slide atual (selecionados) .zip
+            </button>
+            <button
+              id="btn-export-all-slides-selected"
+              class="btn"
+              style="justify-content: center"
+            >
+              Exportar todos os slides (selecionados) .zip
+            </button>
+            <button
+              id="btn-export-all-slides-selected-separate"
+              class="btn"
+              style="justify-content: center"
+            >
+              Exportar todos os slides separadamente
             </button>
             <button
               id="btn-export-svg"
@@ -1682,7 +1833,7 @@
         </div>
         <div class="modal-body">
           <label class="label">Criar novo preset</label>
-          <div style="display: flex; gap: 8px">
+          <div style="display: flex; gap: 8px; margin-bottom: 8px">
             <input
               id="preset-save-name-input"
               class="input"
@@ -1693,6 +1844,62 @@
               Salvar Novo
             </button>
           </div>
+          <div style="margin-bottom: 10px">
+            <label class="label">Descrição do template (para IA)</label>
+            <input
+              id="preset-save-description"
+              class="input"
+              placeholder="Ex: Card de dica com título e subtítulo, para Instagram feed"
+            />
+          </div>
+
+          <!-- Text layer schema editor -->
+          <div style="margin-bottom: 10px">
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 6px;
+              "
+            >
+              <label class="label" style="margin: 0">Campos de texto</label>
+              <span class="text-xs text-muted"
+                >A IA vai preencher esses campos</span
+              >
+            </div>
+            <div
+              id="preset-text-fields-editor"
+              style="display: grid; gap: 4px; max-height: 180px; overflow: auto"
+            >
+              <!-- Rendered by app.js -->
+            </div>
+          </div>
+
+          <!-- Fixed elements (icons, logos, shapes, images) -->
+          <div style="margin-bottom: 10px">
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 6px;
+              "
+            >
+              <label class="label" style="margin: 0"
+                >Elementos fixos do template</label
+              >
+              <span class="text-xs text-muted"
+                >Aplicados em todos os slides</span
+              >
+            </div>
+            <div
+              id="preset-fixed-layers-editor"
+              style="display: grid; gap: 4px; max-height: 140px; overflow: auto"
+            >
+              <!-- Rendered by app.js -->
+            </div>
+          </div>
 
           <div class="section-divider"></div>
 
@@ -1702,7 +1909,7 @@
             style="
               display: grid;
               gap: 6px;
-              max-height: 220px;
+              max-height: 180px;
               overflow: auto;
               margin-bottom: 8px;
             "

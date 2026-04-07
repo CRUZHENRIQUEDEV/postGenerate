@@ -159,6 +159,7 @@ class App {
 
     // Initial sidebar render
     await this._refreshSidebar();
+    this._fillBrandIdentityFields(await this.brands.getCurrentBrand());
     await this._renderProjectsHome();
     this._showProjectsHome(true);
 
@@ -548,12 +549,29 @@ class App {
       });
 
     document
-      .getElementById("prop-grad-reach")
+      .getElementById("prop-grad-from-reach")
       ?.addEventListener("input", (e) => {
-        const reach = parseInt(e.target.value);
-        document.getElementById("prop-grad-reach-val").textContent =
-          reach + "%";
-        const grad = { ...this.canvas.getState().background.gradient, reach };
+        const fromReach = parseInt(e.target.value);
+        document.getElementById("prop-grad-from-reach-val").textContent =
+          fromReach + "%";
+        const grad = {
+          ...this.canvas.getState().background.gradient,
+          fromReach,
+        };
+        this.canvas.updateBackground({ gradient: grad });
+        this._updateGradientBar();
+      });
+    document
+      .getElementById("prop-grad-to-reach")
+      ?.addEventListener("input", (e) => {
+        const toReach = parseInt(e.target.value);
+        document.getElementById("prop-grad-to-reach-val").textContent =
+          toReach + "%";
+        const grad = {
+          ...this.canvas.getState().background.gradient,
+          toReach,
+          reach: toReach,
+        };
         this.canvas.updateBackground({ gradient: grad });
         this._updateGradientBar();
       });
@@ -566,6 +584,8 @@ class App {
         const grad = {
           ...this.canvas.getState().background.gradient,
           opacity,
+          fromOpacity: opacity,
+          toOpacity: opacity,
         };
         this.canvas.updateBackground({ gradient: grad });
         this._updateGradientBar();
@@ -1230,14 +1250,54 @@ class App {
       });
     });
 
+    // Save brand identity (font + voice)
+    document
+      .getElementById("btn-save-brand-identity")
+      ?.addEventListener("click", async () => {
+        const brandId = this.brands.getCurrentBrandId();
+        if (!brandId) {
+          toast("Selecione uma marca para salvar a identidade.", "error");
+          return;
+        }
+        const brand = await this.brands.getCurrentBrand();
+        await this.brands.updateBrand(brandId, {
+          ...brand,
+          primaryFont:
+            document.getElementById("brand-primary-font")?.value?.trim() ??
+            brand.primaryFont,
+          secondaryFont:
+            document.getElementById("brand-secondary-font")?.value?.trim() ??
+            brand.secondaryFont,
+          brandVoice:
+            document.getElementById("brand-voice")?.value?.trim() ??
+            brand.brandVoice,
+          brandKeywords:
+            document.getElementById("brand-keywords")?.value?.trim() ??
+            brand.brandKeywords,
+        });
+        toast("Identidade da marca salva.", "success");
+      });
+
     // Brand switcher in dropdown
     this.brands.on("brandsChange", () => this._refreshBrandDropdown());
-    this.brands.on("currentBrandChange", async () => {
+    this.brands.on("currentBrandChange", async (brand) => {
       await this._refreshSidebar();
       this._refreshBrandDropdown();
+      this._fillBrandIdentityFields(brand);
     });
 
     this._refreshBrandDropdown();
+  }
+
+  _fillBrandIdentityFields(brand) {
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val ?? "";
+    };
+    set("brand-primary-font", brand?.primaryFont);
+    set("brand-secondary-font", brand?.secondaryFont);
+    set("brand-voice", brand?.brandVoice);
+    set("brand-keywords", brand?.brandKeywords);
   }
 
   _refreshBrandDropdown() {
@@ -1557,18 +1617,125 @@ class App {
       });
 
     document
-      .getElementById("btn-export-all-formats")
+      .getElementById("btn-export-all-slides")
       ?.addEventListener("click", async () => {
-        const formatIds = Object.keys(FORMATS);
         const transparent =
           document.getElementById("export-transparent")?.checked ?? false;
         document.getElementById("export-modal")?.classList.remove("open");
-        toast("Exportando todos os formatos...", "info");
+        const slides = this.slides.getSlides();
+        if (!slides.length) {
+          toast("Nenhum slide no projeto.", "info");
+          return;
+        }
+        toast(`Exportando ${slides.length} slide(s)...`, "info");
         try {
-          await this.exporter.exportMultiple(formatIds, { transparent });
+          await this.exporter.exportAllSlides(slides, {
+            transparent,
+            onProgress: (done, total) => {
+              if (done < total)
+                toast(`Exportando slide ${done}/${total}...`, "info");
+            },
+          });
+          toast("ZIP gerado com sucesso!", "success");
+        } catch (e) {
+          toast("Erro ao exportar slides.", "error");
+          console.error(e);
+        }
+      });
+
+    document
+      .getElementById("btn-export-all-formats")
+      ?.addEventListener("click", async () => {
+        const formatIds = this._getSelectedExportFormatIds();
+        const mediaType =
+          document.getElementById("export-zip-media-type")?.value || "png";
+        const transparent =
+          document.getElementById("export-transparent")?.checked ?? false;
+        document.getElementById("export-modal")?.classList.remove("open");
+        if (!formatIds.length) {
+          toast("Selecione ao menos um formato.", "info");
+          return;
+        }
+        toast("Gerando ZIP do slide atual...", "info");
+        try {
+          await this._exportCurrentAcrossFormatsZip({
+            formatIds,
+            mediaType,
+            transparent,
+          });
           toast("Exportação concluída!", "success");
         } catch (e) {
           toast("Erro na exportação.", "error");
+          console.error(e);
+        }
+      });
+    document
+      .getElementById("btn-export-all-slides-selected")
+      ?.addEventListener("click", async () => {
+        const formatIds = this._getSelectedExportFormatIds();
+        const mediaType =
+          document.getElementById("export-zip-media-type")?.value || "png";
+        const transparent =
+          document.getElementById("export-transparent")?.checked ?? false;
+        document.getElementById("export-modal")?.classList.remove("open");
+        if (!formatIds.length) {
+          toast("Selecione ao menos um formato.", "info");
+          return;
+        }
+        const slides = this.slides.getSlides();
+        if (!slides.length) {
+          toast("Nenhum slide no projeto.", "info");
+          return;
+        }
+        toast(
+          `Gerando ZIP ${mediaType.toUpperCase()} (${slides.length} slides)...`,
+          "info",
+        );
+        try {
+          await this._exportAllSlidesAcrossFormatsZip({
+            slides,
+            formatIds,
+            mediaType,
+            transparent,
+          });
+          toast("ZIP gerado com sucesso!", "success");
+        } catch (e) {
+          toast("Erro ao gerar ZIP.", "error");
+          console.error(e);
+        }
+      });
+    document
+      .getElementById("btn-export-all-slides-selected-separate")
+      ?.addEventListener("click", async () => {
+        const formatIds = this._getSelectedExportFormatIds();
+        const mediaType =
+          document.getElementById("export-zip-media-type")?.value || "png";
+        const transparent =
+          document.getElementById("export-transparent")?.checked ?? false;
+        document.getElementById("export-modal")?.classList.remove("open");
+        if (!formatIds.length) {
+          toast("Selecione ao menos um formato.", "info");
+          return;
+        }
+        const slides = this.slides.getSlides();
+        if (!slides.length) {
+          toast("Nenhum slide no projeto.", "info");
+          return;
+        }
+        toast(
+          `Exportando separadamente: ${slides.length} slides em ${mediaType.toUpperCase()}...`,
+          "info",
+        );
+        try {
+          await this._exportAllSlidesAcrossFormatsSeparate({
+            slides,
+            formatIds,
+            mediaType,
+            transparent,
+          });
+          toast("Exportação separada concluída!", "success");
+        } catch (e) {
+          toast("Erro na exportação separada.", "error");
           console.error(e);
         }
       });
@@ -1616,7 +1783,185 @@ class App {
   }
 
   _openExportModal() {
+    this._renderExportFormatOptions();
     document.getElementById("export-modal")?.classList.add("open");
+  }
+
+  _renderExportFormatOptions() {
+    const host = document.getElementById("export-format-options");
+    if (!host) return;
+    if (host.childElementCount) return;
+    Object.values(FORMATS).forEach((fmt) => {
+      const label = document.createElement("label");
+      label.style.cssText =
+        "display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;";
+      label.innerHTML = `
+        <input type="checkbox" class="export-format-checkbox" value="${fmt.id}" ${
+          fmt.id === this.canvas.getState().formatId ? "checked" : ""
+        } />
+        <span>${fmt.label}</span>
+      `;
+      host.appendChild(label);
+    });
+  }
+
+  _getSelectedExportFormatIds() {
+    const nodes = document.querySelectorAll(".export-format-checkbox:checked");
+    return Array.from(nodes)
+      .map((n) => n.value)
+      .filter(Boolean);
+  }
+
+  async _exportCurrentAcrossFormatsZip({ formatIds, mediaType, transparent }) {
+    if (!window.JSZip) throw new Error("JSZip não carregado.");
+    const zip = new window.JSZip();
+    const savedState = structuredClone(this.canvas.getState());
+    try {
+      for (const fmtId of formatIds) {
+        const next = structuredClone(savedState);
+        next.formatId = fmtId;
+        this.canvas.setState(next);
+        this._fitCanvas();
+        await this._wait(90);
+        const blob = await this._exportBlobByMediaType({
+          mediaType,
+          transparent,
+          formatId: fmtId,
+        });
+        const ext =
+          mediaType === "video"
+            ? "webm"
+            : mediaType === "gif"
+              ? "gif"
+              : mediaType;
+        zip.file(this.exporter._buildFilename(next, fmtId, ext), blob);
+      }
+    } finally {
+      this.canvas.setState(savedState);
+      this._fitCanvas();
+      this._updateFormatBadge(this.canvas.getState().formatId);
+    }
+    const blob = await zip.generateAsync({ type: "blob" });
+    const ts = new Date().toISOString().slice(0, 10);
+    this.exporter._download(blob, `slide-atual-${mediaType}-${ts}.zip`);
+  }
+
+  async _exportAllSlidesAcrossFormatsZip({
+    slides,
+    formatIds,
+    mediaType,
+    transparent,
+  }) {
+    if (!window.JSZip) throw new Error("JSZip não carregado.");
+    const zip = new window.JSZip();
+    const savedState = structuredClone(this.canvas.getState());
+    let successCount = 0;
+    try {
+      for (let i = 0; i < slides.length; i++) {
+        for (const fmtId of formatIds) {
+          try {
+            const base = structuredClone(slides[i].state);
+            base.formatId = fmtId;
+            this.canvas.setState(base);
+            this._fitCanvas();
+            await this._wait(90);
+            const blob = await this._exportBlobByMediaType({
+              mediaType,
+              transparent,
+              formatId: fmtId,
+            });
+            const pad = String(i + 1).padStart(2, "0");
+            const ext =
+              mediaType === "video"
+                ? "webm"
+                : mediaType === "gif"
+                  ? "gif"
+                  : mediaType;
+            const name = `slide-${pad}-${this.exporter._buildFilename(base, fmtId, ext)}`;
+            zip.file(name, blob);
+            successCount++;
+          } catch (e) {
+            console.error(`Falha slide ${i + 1} / formato ${fmtId}:`, e);
+          }
+        }
+      }
+    } finally {
+      this.canvas.setState(savedState);
+      this._fitCanvas();
+      this._updateFormatBadge(this.canvas.getState().formatId);
+    }
+    if (!successCount) throw new Error("Nenhum arquivo exportado.");
+    const blob = await zip.generateAsync({ type: "blob" });
+    const ts = new Date().toISOString().slice(0, 10);
+    this.exporter._download(blob, `slides-${mediaType}-${ts}.zip`);
+  }
+
+  async _exportAllSlidesAcrossFormatsSeparate({
+    slides,
+    formatIds,
+    mediaType,
+    transparent,
+  }) {
+    const savedState = structuredClone(this.canvas.getState());
+    let successCount = 0;
+    try {
+      for (let i = 0; i < slides.length; i++) {
+        for (const fmtId of formatIds) {
+          const base = structuredClone(slides[i].state);
+          base.formatId = fmtId;
+          this.canvas.setState(base);
+          this._fitCanvas();
+          await this._wait(90);
+          try {
+            const blob = await this._exportBlobByMediaType({
+              mediaType,
+              transparent,
+              formatId: fmtId,
+            });
+            const pad = String(i + 1).padStart(2, "0");
+            const ext =
+              mediaType === "video"
+                ? "webm"
+                : mediaType === "gif"
+                  ? "gif"
+                  : mediaType;
+            const name = `slide-${pad}-${this.exporter._buildFilename(base, fmtId, ext)}`;
+            this.exporter._download(blob, name);
+            successCount++;
+            await this._wait(220);
+          } catch (e) {
+            console.error(`Falha export separado slide ${i + 1}/${fmtId}:`, e);
+          }
+        }
+      }
+    } finally {
+      this.canvas.setState(savedState);
+      this._fitCanvas();
+      this._updateFormatBadge(this.canvas.getState().formatId);
+    }
+    if (!successCount)
+      throw new Error("Nenhum arquivo foi exportado separadamente.");
+  }
+
+  async _exportBlobByMediaType({ mediaType, transparent, formatId }) {
+    if (mediaType === "svg") {
+      return await this.exporter.exportSVG({
+        transparent,
+        formatId,
+        download: false,
+      });
+    }
+    if (mediaType === "gif") {
+      return await this.anim.exportGIF({ download: false });
+    }
+    if (mediaType === "video") {
+      return await this.anim.exportVideo({ download: false });
+    }
+    return await this.exporter.exportPNG({
+      transparent,
+      formatId,
+      download: false,
+    });
   }
 
   _wireIconModal() {
@@ -1636,6 +1981,34 @@ class App {
       ?.addEventListener("click", async () => {
         await this.anim.play();
       });
+
+    document
+      .getElementById("btn-apply-bg-all-slides")
+      ?.addEventListener("click", async () => {
+        await this._applyCurrentBgToAllSlides();
+      });
+  }
+
+  async _applyCurrentBgToAllSlides() {
+    const slides = this.slides.getSlides(); // already includes latest active state (synced via stateChange)
+    if (slides.length <= 1) {
+      toast("Só há um slide no projeto.", "info");
+      return;
+    }
+    const bg = structuredClone(this.canvas.getState().background);
+    if (!bg) {
+      toast("Sem fundo definido no slide atual.", "info");
+      return;
+    }
+    this.canvas.snapshot();
+    const activeIdx = this.slides.getActiveIndex();
+    const updated = slides.map((s) => {
+      const state = structuredClone(s.state ?? {});
+      state.background = structuredClone(bg);
+      return { ...s, state };
+    });
+    await this.slides.loadSlides(updated, activeIdx);
+    toast(`Fundo aplicado em todos os ${slides.length} slides.`, "success");
   }
 
   _wireShareModal() {
@@ -2126,15 +2499,13 @@ class App {
       docMeta,
       brief,
     });
-    const brandContext = JSON.stringify(
-      {
-        name: brand?.name,
-        description: brand?.description,
-        palette: brand?.palette,
-      },
-      null,
-      2,
-    );
+    const brandContext = await this._buildRichBrandContext(brand);
+    const templateSchema = this._buildTemplateSchema();
+    if (templateSchema.length) {
+      this._pushAIProgress(
+        `Schema do template: ${templateSchema.map((f) => `"${f.layerName}" (${f.role})`).join(", ")}`,
+      );
+    }
     try {
       this._aiBusy = true;
       this._pushAIProgress(
@@ -2157,6 +2528,7 @@ class App {
         docContext,
         currentFormatId: this.canvas.getState().formatId,
         tools,
+        templateSchema,
         temperature: cfg.temperature ?? 0.8,
       });
       this._ensureAISlideCountIntent(
@@ -2170,6 +2542,7 @@ class App {
         content: out.assistantMessage || "Ajustei o post conforme solicitado.",
       });
       this._renderAIChat();
+      this._pushAIDebugLog(out._debug);
       this._pushAIRawResponse(out);
       this._pushAIProgress(
         "Resposta recebida. Aplicando ações em tempo real...",
@@ -2317,6 +2690,10 @@ class App {
       }
       box.innerHTML = "";
       this._aiChatHistory.forEach((msg) => {
+        if (msg.role === "debug") {
+          box.appendChild(this._buildAIDebugBlock(msg));
+          return;
+        }
         const line = document.createElement("div");
         const isUser = msg.role === "user";
         const isProgress = msg.role === "system";
@@ -2339,20 +2716,94 @@ class App {
     });
   }
 
+  _buildAIDebugBlock(msg) {
+    const wrap = document.createElement("div");
+    wrap.style.cssText =
+      "border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:11px;max-width:100%;";
+
+    const makeSection = (label, text, color = "var(--text-muted)") => {
+      const id = `dbg-${Math.random().toString(36).slice(2)}`;
+      const header = document.createElement("div");
+      header.style.cssText = `
+        display:flex;align-items:center;gap:6px;padding:5px 8px;
+        background:var(--surface-2);cursor:pointer;user-select:none;
+        border-top:1px solid var(--border);
+      `;
+      header.innerHTML = `
+        <span style="font-size:10px;color:var(--text-disabled);">▶</span>
+        <span style="font-weight:600;color:${color};flex:1;">${label}</span>
+        <span style="font-size:10px;color:var(--text-disabled);">${String(text ?? "").length} chars</span>
+      `;
+      const body = document.createElement("div");
+      body.id = id;
+      body.style.cssText = `
+        display:none;padding:8px;background:var(--surface-1);
+        overflow:auto;max-height:320px;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+        font-size:10px;white-space:pre-wrap;word-break:break-all;
+        color:var(--text-primary);line-height:1.5;
+      `;
+      body.textContent = text ?? "(vazio)";
+      header.addEventListener("click", () => {
+        const open = body.style.display !== "none";
+        body.style.display = open ? "none" : "block";
+        header.querySelector("span").textContent = open ? "▶" : "▼";
+      });
+      return [header, body];
+    };
+
+    // Endpoint/model badge
+    const badge = document.createElement("div");
+    badge.style.cssText =
+      "padding:4px 8px;background:var(--surface-3);font-size:10px;color:var(--text-disabled);display:flex;gap:8px;";
+    badge.innerHTML = `
+      <span>📡 <b>Endpoint:</b> ${msg.endpoint || "—"}</span>
+      <span>🤖 <b>Model:</b> ${msg.model || "—"}</span>
+    `;
+    wrap.appendChild(badge);
+
+    const [promptHeader, promptBody] = makeSection(
+      "PROMPT ENVIADO",
+      msg.prompt,
+      "#7BC4EC",
+    );
+    wrap.appendChild(promptHeader);
+    wrap.appendChild(promptBody);
+
+    const [respHeader, respBody] = makeSection(
+      "RESPOSTA BRUTA",
+      msg.rawResponse,
+      "#4ade80",
+    );
+    wrap.appendChild(respHeader);
+    wrap.appendChild(respBody);
+
+    return wrap;
+  }
+
   async _buildAIMCPTools(brandId, brief = null) {
     const presets = await PresetsDB.getAll();
     this._aiPresetsCache = presets;
     const basePreset = this._aiBasePresetId
       ? presets.find((p) => p.id === this._aiBasePresetId)
       : null;
+    const templateSchema = this._buildTemplateSchema();
+    const createPagesDescription = templateSchema.length
+      ? `Criar múltiplas páginas/slides. Cada page DEVE ter "textContent" com as chaves: ${templateSchema.map((f) => `"${f.layerName}"`).join(", ")}.`
+      : "Criar múltiplas páginas/slides. Cada page deve ter textContent com os textos mapeados por layerName.";
     return [
       {
         name: "base_preset_policy",
         description:
           "Sempre respeitar o preset base e alterar prioritariamente somente textos, sem quebrar layout.",
         selectedBasePreset: basePreset
-          ? { id: basePreset.id, name: basePreset.name }
+          ? {
+              id: basePreset.id,
+              name: basePreset.name,
+              description: basePreset.description || "",
+            }
           : null,
+        templateSchema,
         required: brief
           ? {
               postCount: brief.postCount,
@@ -2367,12 +2818,17 @@ class App {
       },
       {
         name: "create_pages",
-        description: "Criar múltiplas páginas/slides",
+        description: createPagesDescription,
+        templateSchema,
       },
       {
         name: "use_template",
         description: "Aplicar template/preset existente",
-        availablePresets: presets.map((p) => ({ id: p.id, name: p.name })),
+        availablePresets: presets.map((p) => ({
+          id: p.id,
+          name: p.name,
+          description: p.description || "",
+        })),
       },
       {
         name: "add_icon",
@@ -2448,10 +2904,10 @@ class App {
   _initAIStructuredPromptControls() {
     const formatSelect = document.getElementById("ai-side-format");
     if (!formatSelect || formatSelect.options.length > 0) return;
-    Object.values(FORMATS).forEach((fmt) => {
+    Object.entries(FORMATS).forEach(([id, fmt]) => {
       const op = document.createElement("option");
-      op.value = fmt.id;
-      op.textContent = `${fmt.label} (${fmt.platform})`;
+      op.value = id;
+      op.textContent = `${fmt.label} (${fmt.platformLabel || fmt.platform})`;
       formatSelect.appendChild(op);
     });
     formatSelect.addEventListener("change", () => {
@@ -2524,6 +2980,35 @@ class App {
       subjectPrompt,
     ];
     return lines.join("\n");
+  }
+
+  /** Build template schema from the active base preset or current canvas state */
+  _buildTemplateSchema() {
+    const basePreset = this._aiBasePresetId
+      ? this._aiPresetsCache.find((p) => p.id === this._aiBasePresetId)
+      : null;
+    if (basePreset?.textFields?.length) return basePreset.textFields;
+    // Fall back to live canvas state
+    return this._extractPresetTextFields(this.canvas.getState());
+  }
+
+  /** Build enriched brand context including fonts and voice */
+  async _buildRichBrandContext(brand) {
+    const fonts = brand?.id ? await this.brands.getBrandFonts(brand.id) : [];
+    const fontNames = fonts.map((f) => f.family).filter(Boolean);
+    return JSON.stringify(
+      {
+        name: brand?.name,
+        description: brand?.description,
+        palette: brand?.palette,
+        primaryFont: brand?.primaryFont || fontNames[0] || "",
+        secondaryFont: brand?.secondaryFont || fontNames[1] || "",
+        brandVoice: brand?.brandVoice || "",
+        brandKeywords: brand?.brandKeywords || "",
+      },
+      null,
+      2,
+    );
   }
 
   _buildHistoryForAI(history, rawPrompt, effectivePrompt) {
@@ -2720,12 +3205,24 @@ class App {
       ? out.plan.layers.length
       : 0;
     const line = [
-      "Resposta IA (resumo):",
+      "Resumo da resposta:",
       `- assistantMessage: ${String(out?.assistantMessage || "").slice(0, 180) || "(vazio)"}`,
       `- actions: ${actionTypes.length ? actionTypes.join(", ") : "(nenhuma)"}`,
       `- plan.layers: ${planLayers}`,
     ].join("\n");
     this._aiChatHistory.push({ role: "system", content: line });
+    this._renderAIChat();
+  }
+
+  _pushAIDebugLog(debug) {
+    if (!debug) return;
+    this._aiChatHistory.push({
+      role: "debug",
+      prompt: debug.prompt,
+      rawResponse: debug.rawResponse,
+      endpoint: debug.endpoint,
+      model: debug.model,
+    });
     this._renderAIChat();
   }
 
@@ -2869,14 +3366,28 @@ class App {
     if (!Array.isArray(pages) || !pages.length) return false;
     const current = this.slides.getSlides();
     const templateState = this._resolveAIBaseState();
+
+    // Determine which non-text layers are "fixed" (always carried over)
+    const basePreset = this._aiBasePresetId
+      ? this._aiPresetsCache.find((p) => p.id === this._aiBasePresetId)
+      : null;
+    const fixedLayerIds = basePreset?.fixedLayerIds ?? null; // null = keep all
+
     const built = pages.slice(0, 12).map((page) => {
       const base = structuredClone(templateState);
       base.formatId = page?.formatId || base.formatId;
       if (page?.background && typeof page.background === "object") {
         base.background = { ...base.background, ...page.background };
       }
+      // Filter out non-text layers not in fixedLayerIds (if set)
+      if (Array.isArray(fixedLayerIds)) {
+        base.layers = (base.layers ?? []).filter(
+          (l) => l.type === "text" || fixedLayerIds.includes(l.id),
+        );
+      }
       const textCandidates = this._extractPageTextCandidates(page);
-      this._applyTextsToTemplateState(base, textCandidates);
+      const textContent = page?.textContent ?? null;
+      this._applyTextsToTemplateState(base, textCandidates, textContent);
       return {
         id: crypto.randomUUID(),
         state: base,
@@ -2914,14 +3425,32 @@ class App {
     return lines;
   }
 
-  _applyTextsToTemplateState(state, textCandidates) {
+  _applyTextsToTemplateState(state, textCandidates, textContent = null) {
     if (!state || !Array.isArray(state.layers)) return false;
+    const textLayers = state.layers.filter((l) => l.type === "text");
+    if (!textLayers.length) return false;
+
+    // Prefer named mapping from textContent (AI returns {layerName: text})
+    if (textContent && typeof textContent === "object") {
+      let applied = false;
+      textLayers.forEach((layer) => {
+        const key = Object.keys(textContent).find(
+          (k) => k.toLowerCase() === (layer.name || "").toLowerCase(),
+        );
+        if (key != null) {
+          layer.content =
+            String(textContent[key] ?? "").trim() || layer.content;
+          applied = true;
+        }
+      });
+      if (applied) return true;
+    }
+
+    // Fallback: apply by index order
     const lines = Array.isArray(textCandidates)
       ? textCandidates.map((t) => String(t ?? "").trim()).filter(Boolean)
       : [];
     if (!lines.length) return false;
-    const textLayers = state.layers.filter((l) => l.type === "text");
-    if (!textLayers.length) return false;
     textLayers.forEach((layer, i) => {
       const next = lines[i] ?? lines[lines.length - 1];
       layer.content = next;
@@ -3689,21 +4218,30 @@ class App {
     const bar = document.getElementById("gradient-preview-bar");
     if (bar && bg.gradient) {
       const g = bg.gradient;
-      const reach = Math.max(0, Math.min(100, g.reach ?? 100));
+      const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
+      const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
       const opacity = Math.max(0, Math.min(100, g.opacity ?? 100));
-      const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? 100));
-      const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? 100));
-      const from = this._withOpacity(g.from, (fromOpacity * opacity) / 100);
-      const to = this._withOpacity(g.to, (toOpacity * opacity) / 100);
+      const fromOpacity = Math.max(
+        0,
+        Math.min(100, g.fromOpacity ?? g.opacity ?? 100),
+      );
+      const toOpacity = Math.max(
+        0,
+        Math.min(100, g.toOpacity ?? g.opacity ?? 100),
+      );
+      const from = this._withOpacity(g.from, fromOpacity);
+      const to = this._withOpacity(g.to, toOpacity);
       bar.style.background =
         g.type === "linear"
-          ? `linear-gradient(${g.angle}deg, ${from} 0%, ${to} ${reach}%)`
-          : `radial-gradient(ellipse at center, ${from} 0%, ${to} ${reach}%)`;
+          ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+          : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
       const angleRange = document.getElementById("prop-grad-angle");
       const angleInput = document.getElementById("prop-grad-angle-input");
       const angleVal = document.getElementById("prop-grad-angle-val");
-      const reachRange = document.getElementById("prop-grad-reach");
-      const reachVal = document.getElementById("prop-grad-reach-val");
+      const fromReachRange = document.getElementById("prop-grad-from-reach");
+      const fromReachVal = document.getElementById("prop-grad-from-reach-val");
+      const toReachRange = document.getElementById("prop-grad-to-reach");
+      const toReachVal = document.getElementById("prop-grad-to-reach-val");
       const opacityRange = document.getElementById("prop-grad-opacity");
       const opacityVal = document.getElementById("prop-grad-opacity-val");
       const fromOpacityRange = document.getElementById(
@@ -3717,8 +4255,10 @@ class App {
       if (angleRange) angleRange.value = String(g.angle ?? 135);
       if (angleInput) angleInput.value = String(g.angle ?? 135);
       if (angleVal) angleVal.textContent = `${g.angle ?? 135}°`;
-      if (reachRange) reachRange.value = String(reach);
-      if (reachVal) reachVal.textContent = `${reach}%`;
+      if (fromReachRange) fromReachRange.value = String(fromReach);
+      if (fromReachVal) fromReachVal.textContent = `${fromReach}%`;
+      if (toReachRange) toReachRange.value = String(toReach);
+      if (toReachVal) toReachVal.textContent = `${toReach}%`;
       if (opacityRange) opacityRange.value = String(opacity);
       if (opacityVal) opacityVal.textContent = `${opacity}%`;
       if (fromOpacityRange) fromOpacityRange.value = String(fromOpacity);
@@ -3770,12 +4310,124 @@ class App {
       this._selectedPresetOverwriteId = null;
       const input = document.getElementById("preset-save-name-input");
       if (input) input.value = "";
+      const descInput = document.getElementById("preset-save-description");
+      if (descInput) descInput.value = "";
+      this._renderPresetTextFieldsEditor();
+      this._renderPresetFixedLayersEditor();
       this._renderPresetOverwriteList(scopedPresets);
       document.getElementById("preset-save-modal")?.classList.add("open");
     } catch (e) {
       toast("Erro ao abrir modal de preset.", "error");
       console.error(e);
     }
+  }
+
+  _renderPresetTextFieldsEditor() {
+    const container = document.getElementById("preset-text-fields-editor");
+    if (!container) return;
+    const fields = this._extractPresetTextFields(this.canvas.getState());
+    if (!fields.length) {
+      container.innerHTML =
+        '<div class="text-xs text-muted" style="padding:4px;">Nenhuma camada de texto encontrada no canvas atual.</div>';
+      return;
+    }
+    container.innerHTML = "";
+    fields.forEach((field) => {
+      const row = document.createElement("div");
+      row.style.cssText =
+        "border:1px solid var(--border);border-radius:6px;padding:6px;display:grid;gap:4px;";
+      const fontDisplay = [
+        field.fontFamily || "—",
+        `${field.fontSize}px`,
+        field.fontWeight ? `w${field.fontWeight}` : "",
+        field.color
+          ? `<span style="display:inline-block;width:10px;height:10px;background:${field.color};border-radius:2px;vertical-align:middle;"></span>`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      row.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr 60px;gap:6px;align-items:center;">
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--text-primary);">${field.layerName}</div>
+            <div class="text-xs text-muted" style="line-height:1.4;">${fontDisplay}</div>
+          </div>
+          <input class="input input-sm" data-field-role="${field.layerId}"
+            placeholder="Papel (ex: título principal)"
+            value="${field.role || ""}" />
+          <input class="input input-sm" type="number" data-field-maxchars="${field.layerId}"
+            min="10" max="500" placeholder="máx chars"
+            value="${field.maxChars || ""}" title="Máx caracteres" />
+        </div>
+      `;
+      container.appendChild(row);
+    });
+  }
+
+  _readPresetTextFieldsFromEditor() {
+    const container = document.getElementById("preset-text-fields-editor");
+    if (!container) return null;
+    const fields = this._extractPresetTextFields(this.canvas.getState());
+    return fields.map((field) => {
+      const roleEl = container.querySelector(
+        `[data-field-role="${field.layerId}"]`,
+      );
+      const maxEl = container.querySelector(
+        `[data-field-maxchars="${field.layerId}"]`,
+      );
+      return {
+        ...field,
+        role: roleEl?.value?.trim() || field.role,
+        maxChars: maxEl?.value ? parseInt(maxEl.value, 10) : field.maxChars,
+      };
+    });
+  }
+
+  _renderPresetFixedLayersEditor() {
+    const container = document.getElementById("preset-fixed-layers-editor");
+    if (!container) return;
+    const state = this.canvas.getState();
+    const nonTextLayers = (state.layers ?? []).filter(
+      (l) => l && l.type !== "text",
+    );
+    if (!nonTextLayers.length) {
+      container.innerHTML =
+        '<div class="text-xs text-muted" style="padding:4px;">Nenhum ícone, logo ou forma no canvas atual.</div>';
+      return;
+    }
+    const typeIcon = { icon: "⚡", image: "🖼️", shape: "◼", video: "🎬" };
+    container.innerHTML = "";
+    nonTextLayers.forEach((layer) => {
+      const row = document.createElement("div");
+      row.style.cssText =
+        "display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;";
+      const icon = typeIcon[layer.type] ?? "◻";
+      const colorDot = layer.color
+        ? `<span style="width:10px;height:10px;border-radius:50%;background:${layer.color};flex-shrink:0;display:inline-block;"></span>`
+        : "";
+      row.innerHTML = `
+        <span style="font-size:13px;flex-shrink:0;">${icon}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${layer.name || layer.type}</div>
+          <div class="text-xs text-muted">${layer.type}${layer.iconId ? ` · ${layer.iconId}` : ""}</div>
+        </div>
+        ${colorDot}
+        <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-muted);cursor:pointer;flex-shrink:0;">
+          <input type="checkbox" data-fixed-layer="${layer.id}" checked
+            style="accent-color:var(--accent);width:13px;height:13px;" />
+          fixo
+        </label>
+      `;
+      container.appendChild(row);
+    });
+  }
+
+  _readPresetFixedLayerIds() {
+    const container = document.getElementById("preset-fixed-layers-editor");
+    if (!container) return null;
+    return Array.from(
+      container.querySelectorAll("[data-fixed-layer]:checked"),
+    ).map((el) => el.dataset.fixedLayer);
   }
 
   async _overwritePresetByDoubleClickFlow() {
@@ -3809,7 +4461,17 @@ class App {
           toast("Informe um nome para o novo preset.", "error");
           return;
         }
-        await this._persistPreset({ name });
+        const description =
+          document.getElementById("preset-save-description")?.value?.trim() ??
+          "";
+        const textFields = this._readPresetTextFieldsFromEditor();
+        const fixedLayerIds = this._readPresetFixedLayerIds();
+        await this._persistPreset({
+          name,
+          description,
+          textFields,
+          fixedLayerIds,
+        });
         document.getElementById("preset-save-modal")?.classList.remove("open");
         toast("Preset salvo!", "success");
         await this._refreshPresetsTab();
@@ -3826,10 +4488,21 @@ class App {
           toast("Preset selecionado não encontrado.", "error");
           return;
         }
+        const description =
+          document.getElementById("preset-save-description")?.value?.trim() ??
+          target.description ??
+          "";
+        const textFields =
+          this._readPresetTextFieldsFromEditor() ?? target.textFields;
+        const fixedLayerIds =
+          this._readPresetFixedLayerIds() ?? target.fixedLayerIds;
         await this._persistPreset({
           id: target.id,
           createdAt: target.createdAt,
           name: target.name,
+          description,
+          textFields,
+          fixedLayerIds,
         });
         document.getElementById("preset-save-modal")?.classList.remove("open");
         toast(`Preset "${target.name}" sobrescrito!`, "success");
@@ -3866,18 +4539,107 @@ class App {
     });
   }
 
-  async _persistPreset({ id, createdAt, name }) {
+  async _persistPreset({
+    id,
+    createdAt,
+    name,
+    description,
+    textFields,
+    fixedLayerIds,
+  }) {
     const thumbnail = await this.exporter.generateThumbnail();
+    const state = this.canvas.getState();
+    const existingPreset = id ? await PresetsDB.get(id) : null;
+
+    // Auto-extract text layer schema if not provided
+    const resolvedTextFields =
+      textFields ?? this._extractPresetTextFields(state, existingPreset);
+
+    // Capture brand palette for this preset snapshot
+    const brandId = this.brands.getCurrentBrandId();
+    const brand = brandId ? await this.brands.getCurrentBrand() : null;
+
+    // Summarize animations across all layers
+    const animationSummary = (state.layers ?? [])
+      .filter((l) => l?.animIn && l.animIn !== "none")
+      .map((l) => ({
+        layerName: l.name,
+        animIn: l.animIn,
+        animDuration: l.animDuration,
+        animDelay: l.animDelay,
+      }));
+
     await PresetsDB.save({
       id,
       createdAt,
       name,
-      formatId: this.canvas.getState().formatId,
-      state: this.canvas.getState(),
+      formatId: state.formatId,
+      state,
       thumbnail,
       brandId: null,
-      ownerBrandId: this.brands.getCurrentBrandId(),
+      ownerBrandId: brandId ?? null,
+      description: description ?? existingPreset?.description ?? "",
+      textFields: resolvedTextFields,
+      // Fixed (non-text) layers that appear on every slide
+      fixedLayerIds: fixedLayerIds ?? existingPreset?.fixedLayerIds ?? null,
+      // Snapshot of visual identity at save time
+      background: state.background ?? null,
+      brandPalette: brand?.palette ?? [],
+      brandPrimaryFont: brand?.primaryFont ?? "",
+      brandVoice: brand?.brandVoice ?? "",
+      animations: animationSummary,
     });
+  }
+
+  /** Extract text layer schema from canvas state for AI context */
+  _extractPresetTextFields(state, existingPreset = null) {
+    const layers = Array.isArray(state?.layers) ? state.layers : [];
+    const existingFields = existingPreset?.textFields ?? [];
+    return layers
+      .filter((l) => l?.type === "text")
+      .map((l) => {
+        const existing = existingFields.find((f) => f.layerId === l.id);
+        const charsPerLine = Math.max(
+          10,
+          Math.round(70 / ((l.fontSize || 40) / 40)),
+        );
+        const estimatedLines = Math.max(
+          1,
+          Math.round((l.height || 20) / (((l.fontSize || 40) / 1080) * 100)),
+        );
+        return {
+          layerId: l.id,
+          layerName: l.name || "Texto",
+          role: existing?.role ?? this._inferLayerRole(l),
+          hint: existing?.hint ?? "",
+          // Typography — exact values from the layer
+          fontSize: l.fontSize || 40,
+          fontFamily: l.fontFamily || "",
+          fontWeight: l.fontWeight || 400,
+          color: l.color || "#ffffff",
+          textAlign: l.textAlign || l.align || "left",
+          lineHeight: l.lineHeight || 1.2,
+          letterSpacing: l.letterSpacing || "0em",
+          // Animation
+          animIn: l.animIn || "none",
+          animDelay: l.animDelay ?? 0,
+          // Content limits
+          maxChars:
+            existing?.maxChars ?? Math.min(200, charsPerLine * estimatedLines),
+        };
+      });
+  }
+
+  _inferLayerRole(layer) {
+    const name = String(layer?.name ?? "").toLowerCase();
+    if (/t[ií]tulo|title|headline|h1/.test(name)) return "título principal";
+    if (/sub|descrição|description|body/.test(name))
+      return "subtítulo ou descrição";
+    if (/badge|tag|pill|label|chip/.test(name)) return "tag ou categoria";
+    if (/cta|ação|action|button/.test(name)) return "chamada para ação";
+    if (/autor|name|nome/.test(name)) return "nome ou autor";
+    if (/num|número|step|etapa/.test(name)) return "número ou etapa";
+    return "texto";
   }
 
   _openFilePicker(accept, onFile) {
@@ -3922,6 +4684,7 @@ class App {
       return;
     if (this._realtime.applyingRemote) return;
     clearTimeout(this._projectSaveTimer);
+    this._setSaveStatus("saving");
     this._projectSaveTimer = setTimeout(async () => {
       try {
         await this._saveProjectNow();
@@ -3929,6 +4692,7 @@ class App {
         await this._renderProjectsHome();
       } catch (e) {
         console.error("Erro ao salvar projeto:", e);
+        this._setSaveStatus("error");
       }
     }, 800);
   }
@@ -3938,6 +4702,7 @@ class App {
       return;
     if (this._realtime.applyingRemote) return;
     this._projectDirty = true;
+    this._setSaveStatus("dirty");
   }
 
   async _saveProjectNow() {
@@ -3958,6 +4723,39 @@ class App {
       coverThumbnail,
     });
     this._projectDirty = false;
+    this._setSaveStatus("saved");
+  }
+
+  _setSaveStatus(status) {
+    const el = document.getElementById("project-save-status");
+    if (!el) return;
+    if (!this._currentProjectId) {
+      el.textContent = "";
+      return;
+    }
+    if (status === "dirty") {
+      el.textContent = "●";
+      el.style.color = "var(--text-disabled)";
+      el.title = "Alterações não salvas";
+    }
+    if (status === "saving") {
+      el.textContent = "↑ salvando…";
+      el.style.color = "var(--text-muted)";
+      el.title = "";
+    }
+    if (status === "saved") {
+      el.textContent = "✓ salvo";
+      el.style.color = "#4ade80";
+      el.title = "Projeto salvo";
+      setTimeout(() => {
+        if (el.textContent === "✓ salvo") el.textContent = "";
+      }, 3000);
+    }
+    if (status === "error") {
+      el.textContent = "! erro ao salvar";
+      el.style.color = "#f87171";
+      el.title = "Falha ao salvar. Tente novamente.";
+    }
   }
 
   _setReadOnlyMode(readOnly) {

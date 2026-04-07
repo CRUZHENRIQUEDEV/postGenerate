@@ -19,7 +19,12 @@ export class ExportEngine {
    * @param {string}  opts.formatId    - Override format (optional)
    * @param {string}  opts.filename    - Override download filename
    */
-  async exportPNG({ transparent = false, formatId, filename } = {}) {
+  async exportPNG({
+    transparent = false,
+    formatId,
+    filename,
+    download = true,
+  } = {}) {
     const state = this._engine.getState();
     const fmtId = formatId ?? state.formatId;
     const fmt = getFormat(fmtId);
@@ -47,16 +52,22 @@ export class ExportEngine {
       if (bg.type === "solid") clone.style.background = bg.color;
       else if (bg.type === "gradient") {
         const g = bg.gradient;
-        const reach = Math.max(0, Math.min(100, g.reach ?? 100));
-        const opacity = Math.max(0, Math.min(100, g.opacity ?? 100));
-        const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? 100));
-        const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? 100));
-        const from = this._withOpacity(g.from, (fromOpacity * opacity) / 100);
-        const to = this._withOpacity(g.to, (toOpacity * opacity) / 100);
+        const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
+        const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
+        const fromOpacity = Math.max(
+          0,
+          Math.min(100, g.fromOpacity ?? g.opacity ?? 100),
+        );
+        const toOpacity = Math.max(
+          0,
+          Math.min(100, g.toOpacity ?? g.opacity ?? 100),
+        );
+        const from = this._withOpacity(g.from, fromOpacity);
+        const to = this._withOpacity(g.to, toOpacity);
         clone.style.background =
           g.type === "linear"
-            ? `linear-gradient(${g.angle}deg, ${from} 0%, ${to} ${reach}%)`
-            : `radial-gradient(ellipse at center, ${from} 0%, ${to} ${reach}%)`;
+            ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+            : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
       } else if (bg.type === "image" && bg.image) {
         clone.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
       }
@@ -88,14 +99,19 @@ export class ExportEngine {
         canvas.toBlob(resolve, "image/png"),
       );
       const name = filename ?? this._buildFilename(state, fmtId, "png");
-      this._download(blob, name);
+      if (download) this._download(blob, name);
       return blob;
     } finally {
       clone.remove();
     }
   }
 
-  async exportSVG({ transparent = false, formatId, filename } = {}) {
+  async exportSVG({
+    transparent = false,
+    formatId,
+    filename,
+    download = true,
+  } = {}) {
     const state = this._engine.getState();
     const fmtId = formatId ?? state.formatId;
     const fmt = getFormat(fmtId);
@@ -117,16 +133,22 @@ export class ExportEngine {
       if (bg.type === "solid") clone.style.background = bg.color;
       else if (bg.type === "gradient") {
         const g = bg.gradient;
-        const reach = Math.max(0, Math.min(100, g.reach ?? 100));
-        const opacity = Math.max(0, Math.min(100, g.opacity ?? 100));
-        const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? 100));
-        const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? 100));
-        const from = this._withOpacity(g.from, (fromOpacity * opacity) / 100);
-        const to = this._withOpacity(g.to, (toOpacity * opacity) / 100);
+        const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
+        const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
+        const fromOpacity = Math.max(
+          0,
+          Math.min(100, g.fromOpacity ?? g.opacity ?? 100),
+        );
+        const toOpacity = Math.max(
+          0,
+          Math.min(100, g.toOpacity ?? g.opacity ?? 100),
+        );
+        const from = this._withOpacity(g.from, fromOpacity);
+        const to = this._withOpacity(g.to, toOpacity);
         clone.style.background =
           g.type === "linear"
-            ? `linear-gradient(${g.angle}deg, ${from} 0%, ${to} ${reach}%)`
-            : `radial-gradient(ellipse at center, ${from} 0%, ${to} ${reach}%)`;
+            ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+            : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
       } else if (bg.type === "image" && bg.image) {
         clone.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
       }
@@ -148,7 +170,7 @@ export class ExportEngine {
 </svg>`;
       const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
       const name = filename ?? this._buildFilename(state, fmtId, "svg");
-      this._download(blob, name);
+      if (download) this._download(blob, name);
       return blob;
     } finally {
       clone.remove();
@@ -161,7 +183,11 @@ export class ExportEngine {
    */
   async exportMultiple(formatIds, { transparent = false } = {}) {
     if (!window.JSZip) {
-      this._fallbackMultiple(formatIds, transparent);
+      toast?.(
+        "JSZip não carregado — baixando arquivos individualmente.",
+        "info",
+      );
+      await this._fallbackMultiple(formatIds, transparent);
       return;
     }
 
@@ -170,7 +196,12 @@ export class ExportEngine {
 
     for (const fmtId of formatIds) {
       try {
-        const blob = await this.exportPNG({ transparent, formatId: fmtId });
+        // download: false — we collect blobs into the ZIP, not individual files
+        const blob = await this.exportPNG({
+          transparent,
+          formatId: fmtId,
+          download: false,
+        });
         zip.file(this._buildFilename(state, fmtId), blob);
       } catch (e) {
         console.error(`Export ${fmtId} failed:`, e);
@@ -179,6 +210,48 @@ export class ExportEngine {
 
     const zipBlob = await zip.generateAsync({ type: "blob" });
     this._download(zipBlob, "post-generate-export.zip");
+  }
+
+  /**
+   * Export all slides in the project as individual PNGs inside a ZIP.
+   * @param {Array<{id, state}>} slides  — slides array from SlideManager
+   * @param {function} onProgress        — optional (done, total) callback
+   */
+  async exportAllSlides(slides, { transparent = false, onProgress } = {}) {
+    if (!Array.isArray(slides) || !slides.length) return;
+
+    if (!window.JSZip) {
+      // Fallback: export only the current slide
+      await this.exportPNG({ transparent });
+      return;
+    }
+
+    const zip = new window.JSZip();
+    const savedState = structuredClone(this._engine.getState());
+
+    for (let i = 0; i < slides.length; i++) {
+      const slide = slides[i];
+      try {
+        this._engine.setState(structuredClone(slide.state));
+        await new Promise((r) => setTimeout(r, 60)); // let canvas settle
+        const state = this._engine.getState();
+        const fmtId = state.formatId;
+        const blob = await this.exportPNG({ transparent, download: false });
+        const pad = String(i + 1).padStart(2, "0");
+        const name = `slide-${pad}-${this._buildFilename(state, fmtId)}`;
+        zip.file(name, blob);
+        onProgress?.(i + 1, slides.length);
+      } catch (e) {
+        console.error(`Slide ${i + 1} export failed:`, e);
+      }
+    }
+
+    // Restore original state
+    this._engine.setState(savedState);
+
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const ts = new Date().toISOString().slice(0, 10);
+    this._download(zipBlob, `slides-${ts}.zip`);
   }
 
   /** Fallback: sequential downloads (no zip) */
@@ -209,16 +282,22 @@ export class ExportEngine {
     if (bg.type === "solid") clone.style.background = bg.color;
     else if (bg.type === "gradient") {
       const g = bg.gradient;
-      const reach = Math.max(0, Math.min(100, g.reach ?? 100));
-      const opacity = Math.max(0, Math.min(100, g.opacity ?? 100));
-      const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? 100));
-      const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? 100));
-      const from = this._withOpacity(g.from, (fromOpacity * opacity) / 100);
-      const to = this._withOpacity(g.to, (toOpacity * opacity) / 100);
+      const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
+      const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
+      const fromOpacity = Math.max(
+        0,
+        Math.min(100, g.fromOpacity ?? g.opacity ?? 100),
+      );
+      const toOpacity = Math.max(
+        0,
+        Math.min(100, g.toOpacity ?? g.opacity ?? 100),
+      );
+      const from = this._withOpacity(g.from, fromOpacity);
+      const to = this._withOpacity(g.to, toOpacity);
       clone.style.background =
         g.type === "linear"
-          ? `linear-gradient(${g.angle}deg, ${from} 0%, ${to} ${reach}%)`
-          : `radial-gradient(ellipse at center, ${from} 0%, ${to} ${reach}%)`;
+          ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+          : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
     }
 
     for (const layer of state.layers) {

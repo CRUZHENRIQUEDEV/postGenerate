@@ -152,6 +152,10 @@ export const BrandsDB = {
       logo: brand.logo ?? null, // base64 or null
       palette: brand.palette ?? [], // [{ id, name, hex }]
       fontIds: brand.fontIds ?? [], // references to fonts store
+      primaryFont: brand.primaryFont ?? "", // CSS font-family name, e.g. "Montserrat"
+      secondaryFont: brand.secondaryFont ?? "", // optional secondary font
+      brandVoice: brand.brandVoice ?? "", // tone/style description for AI, e.g. "profissional, direto, inspirador"
+      brandKeywords: brand.brandKeywords ?? "", // comma-separated keywords/values
       createdAt: brand.createdAt ?? now,
       updatedAt: now,
     });
@@ -259,6 +263,16 @@ export const PresetsDB = {
       state: preset.state ?? null, // JSON serialized canvas state
       thumbnail: preset.thumbnail ?? null, // base64 PNG thumbnail
       brandId: preset.brandId ?? null,
+      // Template metadata for AI — describes what text each layer expects
+      description: preset.description ?? "", // what this template is for
+      textFields: preset.textFields ?? [], // [{ layerId, layerName, role, hint, maxChars, fontSize, fontFamily, fontWeight, color, textAlign, animIn, ... }]
+      fixedLayerIds: preset.fixedLayerIds ?? null, // null = all non-text layers; array = specific ids marked as fixed
+      // Visual identity snapshot (used when applying preset to all slides)
+      background: preset.background ?? null, // background state at save time
+      brandPalette: preset.brandPalette ?? [], // brand palette snapshot
+      brandPrimaryFont: preset.brandPrimaryFont ?? "",
+      brandVoice: preset.brandVoice ?? "",
+      animations: preset.animations ?? [], // [{ layerName, animIn, animDuration, animDelay }]
       createdAt: preset.createdAt ?? now,
       updatedAt: now,
     });

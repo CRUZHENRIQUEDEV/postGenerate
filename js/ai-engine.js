@@ -9,6 +9,7 @@ export class AIEngine {
     docContext,
     currentFormatId,
     tools,
+    templateSchema,
     temperature = 0.8,
   }) {
     if (!apiKey) throw new Error("API key não informada.");
@@ -18,6 +19,7 @@ export class AIEngine {
       docContext,
       currentFormatId,
       tools,
+      templateSchema,
     });
     const req = this._buildRequest({
       provider,
@@ -27,11 +29,19 @@ export class AIEngine {
       finalPrompt,
       temperature,
     });
-    const { data } = await this._requestWithFallback(req);
+    const { data, url } = await this._requestWithFallback(req);
     this._assertProviderSuccess(data);
     const text = this._extractText(data);
     const payload = this._extractJSON(text);
-    return this._normalizeAssistantPayload(payload, currentFormatId);
+    const normalized = this._normalizeAssistantPayload(payload, currentFormatId);
+    // Expose debug info for chat logging
+    normalized._debug = {
+      prompt: finalPrompt,
+      rawResponse: text,
+      endpoint: url,
+      model: req.body?.model ?? model,
+    };
+    return normalized;
   }
 
   async generatePostPlan({
@@ -66,6 +76,7 @@ export class AIEngine {
     docContext,
     currentFormatId,
     tools,
+    templateSchema,
   }) {
     const history = (chatHistory ?? [])
       .filter((m) => m?.content)
@@ -73,60 +84,87 @@ export class AIEngine {
         (m) => `${m.role === "assistant" ? "ASSISTANT" : "USER"}: ${m.content}`,
       )
       .join("\n");
+
+    const hasSchema = Array.isArray(templateSchema) && templateSchema.length > 0;
+    const schemaBlock = hasSchema
+      ? `\nSCHEMA DO TEMPLATE (campos que cada slide precisa ter preenchidos):\n${templateSchema
+          .map(
+            (f, i) =>
+              `  ${i + 1}. layerName: "${f.layerName}" | role: "${f.role || "texto"}" | fontSize: ${f.fontSize || "?"}px | maxChars: ${f.maxChars || "~80"} | hint: "${f.hint || ""}"`,
+          )
+          .join("\n")}\n`
+      : "";
+
+    const createPagesExample = hasSchema
+      ? JSON.stringify(
+          {
+            type: "create_pages",
+            payload: {
+              pages: [
+                {
+                  formatId: currentFormatId,
+                  textContent: Object.fromEntries(
+                    templateSchema.map((f) => [
+                      f.layerName,
+                      `<conteúdo para "${f.role || f.layerName}">`,
+                    ]),
+                  ),
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )
+      : JSON.stringify(
+          {
+            type: "create_pages",
+            payload: {
+              pages: [
+                {
+                  formatId: currentFormatId,
+                  textContent: { "Título": "<título>", "Subtítulo": "<subtítulo>" },
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        );
+
     return `
-Você é um agente criativo para editor de posts.
-Você usa um catálogo MCP de ferramentas para montar posts.
-Retorne APENAS JSON válido:
+Você é um agente criativo para editor de posts de redes sociais.
+Você recebe um template com campos de texto definidos e deve preenchê-los com copy criativo.
+
+${schemaBlock}
+REGRAS CRÍTICAS:
+- SEMPRE retorne JSON válido sem markdown.
+- SEMPRE inclua "assistantMessage" com resposta curta ao usuário.
+- NUNCA altere layout, fontes, tamanhos ou posições — apenas os TEXTOS.
+- Se o usuário pedir N slides/posts, crie EXATAMENTE N itens em pages[].
+- Para cada slide, preencha TODOS os campos do schema em "textContent" (chave = layerName exato).
+- Textos de slides diferentes devem ser ÚNICOS — não repita o mesmo conteúdo.
+- Respeite o maxChars de cada campo — textos muito longos serão cortados.
+- Use a fonte, a voz e as cores da marca para guiar o estilo do copy.
+
+FORMATO DE RESPOSTA:
 {
   "assistantMessage": "texto curto para o usuário",
   "actions": [
-    {
-      "type": "apply_plan|create_pages|use_template|add_icon|add_text",
-      "payload": {}
-    }
+    ${createPagesExample}
   ],
-  "plan": {
-    "formatId": "ig-feed-square",
-    "background": {
-      "type": "solid|gradient",
-      "color": "#RRGGBB",
-      "gradient": {
-        "type": "linear|radial",
-        "from": "#RRGGBB",
-        "to": "#RRGGBB",
-        "angle": 135,
-        "reach": 100,
-        "opacity": 100,
-        "fromOpacity": 100,
-        "toOpacity": 100
-      }
-    },
-    "layers": []
-  }
+  "plan": {}
 }
 
-Regras:
-- Sempre responder com "assistantMessage".
-- Preservar template/preset base: alterar prioritariamente conteúdos de texto, sem destruir layout.
-- Se precisar alterar layout atual, inclua action "apply_plan" com payload vazio e preencha "plan".
-- Para adicionar páginas/slides, use action "create_pages".
-- Para usar template/preset existente, use action "use_template" com nome aproximado.
-- Para ícones, use action "add_icon" com iconId (ex: ph:star-bold).
-- Em create_pages, sempre enviar payload.pages completo; se não souber todos os campos, ao menos title/topic e count.
-- Se o usuário pedir N slides/posts/páginas, crie EXATAMENTE N páginas via create_pages.
-- O foco é copy/conteúdo. Evite alterar tamanhos de fonte e layout do template base.
-- Para cada página criada, forneça textos diferentes (não duplicar o mesmo texto).
-- Mantenha JSON limpo e sem markdown.
-
-MCP tools:
+MCP tools disponíveis:
 ${JSON.stringify(tools ?? this._defaultTools(), null, 2)}
 
-Format atual preferencial: "${currentFormatId}".
+Format atual: "${currentFormatId}".
 
 Contexto da marca:
 ${brandContext || "Sem contexto de marca"}
 
-Documentos de insumo:
+Documentos/materiais da marca:
 ${docContext || "Sem documentos anexados"}
 
 Histórico do chat:

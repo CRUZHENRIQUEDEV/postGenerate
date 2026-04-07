@@ -54,6 +54,8 @@ export function createDefaultState(formatId = "ig-feed-square") {
         from: "#000000",
         to: "#0e1a2e",
         angle: 135,
+        fromReach: 0,
+        toReach: 100,
         reach: 100,
         opacity: 100,
         fromOpacity: 100,
@@ -464,16 +466,22 @@ export class CanvasEngine {
       bgEl.style.background = bg.color;
     } else if (bg.type === "gradient") {
       const g = bg.gradient;
-      const reach = Math.max(0, Math.min(100, g.reach ?? 100));
-      const opacity = Math.max(0, Math.min(100, g.opacity ?? 100));
-      const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? 100));
-      const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? 100));
-      const from = this._withOpacity(g.from, (fromOpacity * opacity) / 100);
-      const to = this._withOpacity(g.to, (toOpacity * opacity) / 100);
+      const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
+      const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
+      const fromOpacity = Math.max(
+        0,
+        Math.min(100, g.fromOpacity ?? g.opacity ?? 100),
+      );
+      const toOpacity = Math.max(
+        0,
+        Math.min(100, g.toOpacity ?? g.opacity ?? 100),
+      );
+      const from = this._withOpacity(g.from, fromOpacity);
+      const to = this._withOpacity(g.to, toOpacity);
       bgEl.style.background =
         g.type === "linear"
-          ? `linear-gradient(${g.angle}deg, ${from} 0%, ${to} ${reach}%)`
-          : `radial-gradient(ellipse at center, ${from} 0%, ${to} ${reach}%)`;
+          ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+          : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
     } else if (bg.type === "image" && bg.image) {
       bgEl.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
     }
