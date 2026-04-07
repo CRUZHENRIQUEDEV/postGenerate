@@ -162,6 +162,7 @@ class App {
     this._fillBrandIdentityFields(await this.brands.getCurrentBrand());
     await this._renderProjectsHome();
     this._showProjectsHome(true);
+    await this._consumeShareLinkFromURL();
 
     toast("PostGenerate pronto.", "info");
   }
@@ -3605,6 +3606,28 @@ class App {
     }
   }
 
+  async _generateProjectShareLink(projectId, permission = "view") {
+    if (!projectId) return;
+    try {
+      if (this._currentProjectId === projectId) {
+        await this._saveProjectNow();
+      }
+      const code = await shareCode.generateProjectCode(projectId, permission);
+      const url = new URL(window.location.href);
+      url.searchParams.set("share", code);
+      const link = url.toString();
+      try {
+        await navigator.clipboard?.writeText(link);
+        toast("Link de compartilhamento copiado.", "success");
+      } catch {
+        window.prompt("Copie o link do projeto:", link);
+      }
+    } catch (e) {
+      toast("Erro ao gerar link do projeto.", "error");
+      console.error(e);
+    }
+  }
+
   async _applyShareCode() {
     const raw = document.getElementById("share-code-input")?.value?.trim();
     if (!raw) {
@@ -3613,25 +3636,7 @@ class App {
     }
     try {
       const envelope = shareCode.parseCode(raw);
-      if (envelope.scope === "project") {
-        const source = envelope.payload?.project;
-        if (!source) throw new Error("Projeto inválido no código.");
-        const importedId = crypto.randomUUID();
-        const imported = {
-          ...source,
-          id: importedId,
-          name: `${source.name || "Projeto"} (compartilhado)`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        await ProjectsDB.save(imported);
-        await this._renderProjectsHome();
-        await this._openProject(importedId, {
-          forceReadOnly: envelope.permission === "view",
-        });
-      } else {
-        await this._importSharedBrand(envelope);
-      }
+      await this._applyShareEnvelope(envelope);
       this._closeShareModal();
       toast(
         envelope.permission === "view"
@@ -3642,6 +3647,50 @@ class App {
     } catch (e) {
       toast("Código de compartilhamento inválido.", "error");
       console.error(e);
+    }
+  }
+
+  async _applyShareEnvelope(envelope) {
+    if (envelope.scope === "project") {
+      const source = envelope.payload?.project;
+      if (!source) throw new Error("Projeto inválido no código.");
+      const importedId = crypto.randomUUID();
+      const imported = {
+        ...source,
+        id: importedId,
+        name: `${source.name || "Projeto"} (compartilhado)`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await ProjectsDB.save(imported);
+      await this._renderProjectsHome();
+      await this._openProject(importedId, {
+        forceReadOnly: envelope.permission === "view",
+      });
+    } else {
+      await this._importSharedBrand(envelope);
+    }
+  }
+
+  async _consumeShareLinkFromURL() {
+    const url = new URL(window.location.href);
+    const raw = url.searchParams.get("share") || "";
+    if (!raw) return;
+    try {
+      const envelope = shareCode.parseCode(raw);
+      await this._applyShareEnvelope(envelope);
+      toast(
+        envelope.permission === "view"
+          ? "Projeto compartilhado aberto por link (somente leitura)."
+          : "Projeto compartilhado aberto por link.",
+        "success",
+      );
+    } catch (e) {
+      toast("Link de compartilhamento inválido.", "error");
+      console.error(e);
+    } finally {
+      url.searchParams.delete("share");
+      history.replaceState({}, "", url.toString());
     }
   }
 
@@ -4042,6 +4091,7 @@ class App {
         <div class="project-card-meta">
           <div class="project-card-top">
           <div class="project-card-name">${project.name}</div>
+          <button class="project-card-rename" data-share-link-project="${project.id}" title="Gerar link de compartilhamento">🔗</button>
           <button class="project-card-rename" data-rename-project="${project.id}" title="Renomear projeto">✎</button>
           <button class="project-card-delete" data-delete-project="${project.id}" title="Excluir projeto">×</button>
           </div>
@@ -4051,6 +4101,13 @@ class App {
       card.addEventListener("click", async () => {
         await this._openProject(project.id);
       });
+      card
+        .querySelector(`[data-share-link-project]`)
+        ?.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await this._generateProjectShareLink(project.id);
+        });
       card
         .querySelector(`[data-rename-project]`)
         ?.addEventListener("click", async (e) => {
