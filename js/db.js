@@ -10,7 +10,7 @@
    ============================================================ */
 
 const DB_NAME = "PostGenerateDB";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let _db = null;
 
@@ -82,6 +82,19 @@ export function openDB() {
         s.createIndex("name", "name", { unique: false });
         s.createIndex("brandId", "brandId", { unique: false });
         s.createIndex("updatedAt", "updatedAt", { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains("aiConfig")) {
+        const s = db.createObjectStore("aiConfig", { keyPath: "id" });
+        s.createIndex("brandId", "brandId", { unique: false });
+        s.createIndex("provider", "provider", { unique: false });
+        s.createIndex("updatedAt", "updatedAt", { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains("brandDocs")) {
+        const s = db.createObjectStore("brandDocs", { keyPath: "id" });
+        s.createIndex("brandId", "brandId", { unique: false });
+        s.createIndex("createdAt", "createdAt", { unique: false });
       }
     };
   });
@@ -301,6 +314,54 @@ export const ProjectsDB = {
   },
 
   delete: (id) => remove("projects", id),
+};
+
+export const AIConfigDB = {
+  getAll: () => getAll("aiConfig"),
+
+  getByBrand: (brandId) => getByIndex("aiConfig", "brandId", brandId),
+
+  get: (id) => getOne("aiConfig", id),
+
+  save: (config) => {
+    const now = new Date().toISOString();
+    return put("aiConfig", {
+      id: config.id ?? crypto.randomUUID(),
+      brandId: config.brandId ?? null,
+      provider: config.provider ?? "minimax",
+      model: config.model ?? "MiniMax-M1",
+      endpoint: config.endpoint ?? "",
+      apiKey: config.apiKey ?? "",
+      temperature: Number.isFinite(config.temperature) ? config.temperature : 0.8,
+      createdAt: config.createdAt ?? now,
+      updatedAt: now,
+    });
+  },
+
+  delete: (id) => remove("aiConfig", id),
+};
+
+export const BrandDocsDB = {
+  getAll: () => getAll("brandDocs"),
+
+  getByBrand: (brandId) => getByIndex("brandDocs", "brandId", brandId),
+
+  get: (id) => getOne("brandDocs", id),
+
+  save: (doc) => {
+    const now = new Date().toISOString();
+    return put("brandDocs", {
+      id: doc.id ?? crypto.randomUUID(),
+      brandId: doc.brandId ?? null,
+      name: doc.name ?? "Documento",
+      mimeType: doc.mimeType ?? "text/plain",
+      content: doc.content ?? "",
+      createdAt: doc.createdAt ?? now,
+      updatedAt: now,
+    });
+  },
+
+  delete: (id) => remove("brandDocs", id),
 };
 
 /* ── Convenience: init and seed defaults ─────────────────── */

@@ -936,6 +936,23 @@ select.input {
   line-height: 1;
   transition: var(--t-fast);
 }
+.project-card-rename {
+  width: 20px;
+  height: 20px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  transition: var(--t-fast);
+}
+.project-card-rename:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--border-accent);
+}
 .project-card-delete:hover {
   background: var(--danger-dim);
   color: var(--danger);

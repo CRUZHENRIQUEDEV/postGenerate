@@ -49,7 +49,16 @@ export function createDefaultState(formatId = "ig-feed-square") {
     background: {
       type: "solid",
       color: "#000000",
-      gradient: { type: "linear", from: "#000000", to: "#0e1a2e", angle: 135 },
+      gradient: {
+        type: "linear",
+        from: "#000000",
+        to: "#0e1a2e",
+        angle: 135,
+        reach: 100,
+        opacity: 100,
+        fromOpacity: 100,
+        toOpacity: 100,
+      },
       image: null,
       imageSize: "cover",
     },
@@ -220,6 +229,7 @@ export function makeImageLayer(id, name, src) {
     height: 40,
     src: src ?? "",
     objectFit: "contain",
+    imageZoom: 1,
     opacity: 1,
     hasBorder: false,
     borderColor: "rgba(255,255,255,0.28)",
@@ -454,10 +464,16 @@ export class CanvasEngine {
       bgEl.style.background = bg.color;
     } else if (bg.type === "gradient") {
       const g = bg.gradient;
+      const reach = Math.max(0, Math.min(100, g.reach ?? 100));
+      const opacity = Math.max(0, Math.min(100, g.opacity ?? 100));
+      const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? 100));
+      const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? 100));
+      const from = this._withOpacity(g.from, (fromOpacity * opacity) / 100);
+      const to = this._withOpacity(g.to, (toOpacity * opacity) / 100);
       bgEl.style.background =
         g.type === "linear"
-          ? `linear-gradient(${g.angle}deg, ${g.from}, ${g.to})`
-          : `radial-gradient(ellipse at center, ${g.from}, ${g.to})`;
+          ? `linear-gradient(${g.angle}deg, ${from} 0%, ${to} ${reach}%)`
+          : `radial-gradient(ellipse at center, ${from} 0%, ${to} ${reach}%)`;
     } else if (bg.type === "image" && bg.image) {
       bgEl.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
     }
@@ -583,6 +599,8 @@ export class CanvasEngine {
       img.src = layer.src;
       img.crossOrigin = "anonymous";
       img.style.cssText = `width:100%;height:100%;object-fit:${layer.objectFit ?? "contain"};display:block;`;
+      img.style.transform = `scale(${Math.max(0.2, Math.min(4, layer.imageZoom ?? 1))})`;
+      img.style.transformOrigin = "center center";
       img.style.pointerEvents = "none";
       el.appendChild(img);
     }
@@ -702,6 +720,41 @@ export class CanvasEngine {
 
   _emit(event, data) {
     (this._listeners[event] ?? []).forEach((cb) => cb(data));
+  }
+
+  _withOpacity(color, opacityPercent = 100) {
+    const alpha = Math.max(0, Math.min(1, (opacityPercent ?? 100) / 100));
+    const c = String(color ?? "#000000").trim();
+    if (c.startsWith("#")) {
+      let hex = c.slice(1);
+      if (hex.length === 3 || hex.length === 4) {
+        hex = hex
+          .split("")
+          .map((ch) => ch + ch)
+          .join("");
+      }
+      if (hex.length === 8) hex = hex.slice(0, 6);
+      if (hex.length === 6) {
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+    }
+    const rgbaMatch = c.match(
+      /rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+))?\s*\)/i,
+    );
+    if (rgbaMatch) {
+      const r = Number(rgbaMatch[1]);
+      const g = Number(rgbaMatch[2]);
+      const b = Number(rgbaMatch[3]);
+      const baseA =
+        rgbaMatch[4] == null
+          ? 1
+          : Math.max(0, Math.min(1, Number(rgbaMatch[4])));
+      return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, baseA * alpha))})`;
+    }
+    return c;
   }
 
   /* ── History ──────────────────────────────────────────── */

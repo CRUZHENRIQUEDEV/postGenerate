@@ -5,10 +5,13 @@
 
 import {
   initDB,
+  BrandsDB,
   PresetsDB,
   ColorsDB,
   PostHistoryDB,
   ProjectsDB,
+  AIConfigDB,
+  BrandDocsDB,
 } from "./db.js";
 import { FORMATS, FORMAT_GROUPS, getFormat } from "./formats.js";
 import {
@@ -28,6 +31,10 @@ import { ColorPicker } from "./color-picker.js";
 import { IconSearch } from "./icon-search.js";
 import { SlideManager } from "./slide-manager.js";
 import { AnimEngine } from "./anim-engine.js";
+import { aiEngine } from "./ai-engine.js";
+import { shareCode } from "../network/ShareCodeManager.js";
+import { network } from "../network/NetworkManager.js";
+import { bus } from "../network/EventBus.js";
 
 /* ── Google Fonts preload list ──────────────────────────── */
 const GOOGLE_FONTS = [
@@ -64,6 +71,31 @@ class App {
     this._projectSaveTimer = null;
     this._currentProjectId = null;
     this._loadingProject = false;
+    this._projectDirty = false;
+    this._savePresetClickTimer = null;
+    this._selectedPresetOverwriteId = null;
+    this._presetSaveModalBound = false;
+    this._aiModalBound = false;
+    this._aiConfigId = null;
+    this._aiDocs = [];
+    this._aiChatHistory = [];
+    this._aiBusy = false;
+    this._aiPendingResponse = null;
+    this._aiPendingCursor = 0;
+    this._aiUndoStack = [];
+    this._aiSideOpen = false;
+    this._aiBasePresetId = "";
+    this._aiPresetsCache = [];
+    this._shareReadOnly = false;
+    this._realtime = {
+      active: false,
+      roomId: null,
+      role: null,
+      applyingRemote: false,
+      lastRemoteTs: 0,
+      syncTimer: null,
+      bound: false,
+    };
   }
 
   /* ── Boot ─────────────────────────────────────────────── */
@@ -106,8 +138,14 @@ class App {
     this._wireIconModal();
     this._wireAnimationPanel();
     this._wireProjectsHome();
+    this._wireShareModal();
+    this._wireAIModal();
+    this._wireRealtimeCollab();
     await this.slides.init();
-    this.slides.on("change", () => this._queueProjectSave());
+    this.slides.on("change", () => {
+      this._markProjectDirty();
+      this._queueProjectSave();
+    });
 
     // Fit on resize
     window.addEventListener("resize", () => this._fitCanvas());
@@ -168,11 +206,13 @@ class App {
       this._fitCanvas();
       this._updateFormatBadge(fmtId);
       this._queueBrandHistorySave();
+      this._markProjectDirty();
       this._queueProjectSave();
     });
 
     this.canvas.on("stateChange", () => {
       this._queueBrandHistorySave();
+      this._markProjectDirty();
       this._queueProjectSave();
     });
   }
@@ -371,6 +411,10 @@ class App {
     this._setVal("prop-img-height", layer.height?.toFixed(1) ?? 40);
     this._setVal("prop-img-fit", layer.objectFit ?? "contain");
     this._setVal("prop-img-radius", layer.borderRadius ?? 0);
+    const zoom = Number(layer.imageZoom ?? 1);
+    this._setVal("prop-img-zoom", zoom.toFixed(2));
+    const zoomVal = document.getElementById("prop-img-zoom-val");
+    if (zoomVal) zoomVal.textContent = `${zoom.toFixed(2)}x`;
     this._setVal("prop-opacity", Math.round((layer.opacity ?? 1) * 100));
   }
 
@@ -471,6 +515,22 @@ class App {
         const angle = parseInt(e.target.value);
         document.getElementById("prop-grad-angle-val").textContent =
           angle + "°";
+        const angleInput = document.getElementById("prop-grad-angle-input");
+        if (angleInput) angleInput.value = String(angle);
+        const grad = { ...this.canvas.getState().background.gradient, angle };
+        this.canvas.updateBackground({ gradient: grad });
+        this._updateGradientBar();
+      });
+    document
+      .getElementById("prop-grad-angle-input")
+      ?.addEventListener("input", (e) => {
+        const raw = parseInt(e.target.value);
+        const angle = Math.max(0, Math.min(360, Number.isNaN(raw) ? 0 : raw));
+        document.getElementById("prop-grad-angle-val").textContent =
+          angle + "°";
+        const angleRange = document.getElementById("prop-grad-angle");
+        if (angleRange) angleRange.value = String(angle);
+        if (e.target.value !== String(angle)) e.target.value = String(angle);
         const grad = { ...this.canvas.getState().background.gradient, angle };
         this.canvas.updateBackground({ gradient: grad });
         this._updateGradientBar();
@@ -484,6 +544,57 @@ class App {
           type: e.target.value,
         };
         this.canvas.updateBackground({ gradient: grad });
+        this._updateGradientBar();
+      });
+
+    document
+      .getElementById("prop-grad-reach")
+      ?.addEventListener("input", (e) => {
+        const reach = parseInt(e.target.value);
+        document.getElementById("prop-grad-reach-val").textContent =
+          reach + "%";
+        const grad = { ...this.canvas.getState().background.gradient, reach };
+        this.canvas.updateBackground({ gradient: grad });
+        this._updateGradientBar();
+      });
+    document
+      .getElementById("prop-grad-opacity")
+      ?.addEventListener("input", (e) => {
+        const opacity = parseInt(e.target.value);
+        document.getElementById("prop-grad-opacity-val").textContent =
+          opacity + "%";
+        const grad = {
+          ...this.canvas.getState().background.gradient,
+          opacity,
+        };
+        this.canvas.updateBackground({ gradient: grad });
+        this._updateGradientBar();
+      });
+    document
+      .getElementById("prop-grad-from-opacity")
+      ?.addEventListener("input", (e) => {
+        const fromOpacity = parseInt(e.target.value);
+        document.getElementById("prop-grad-from-opacity-val").textContent =
+          fromOpacity + "%";
+        const grad = {
+          ...this.canvas.getState().background.gradient,
+          fromOpacity,
+        };
+        this.canvas.updateBackground({ gradient: grad });
+        this._updateGradientBar();
+      });
+    document
+      .getElementById("prop-grad-to-opacity")
+      ?.addEventListener("input", (e) => {
+        const toOpacity = parseInt(e.target.value);
+        document.getElementById("prop-grad-to-opacity-val").textContent =
+          toOpacity + "%";
+        const grad = {
+          ...this.canvas.getState().background.gradient,
+          toOpacity,
+        };
+        this.canvas.updateBackground({ gradient: grad });
+        this._updateGradientBar();
       });
 
     // Image upload
@@ -768,6 +879,17 @@ class App {
         borderRadius: parseFloat(e.target.value) || 0,
       });
     });
+    panel.querySelector("#prop-img-zoom")?.addEventListener("input", (e) => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer) return;
+      const imageZoom = Math.max(
+        0.2,
+        Math.min(4, parseFloat(e.target.value) || 1),
+      );
+      const zoomVal = document.getElementById("prop-img-zoom-val");
+      if (zoomVal) zoomVal.textContent = `${imageZoom.toFixed(2)}x`;
+      this.canvas.updateLayer(layer.id, { imageZoom });
+    });
 
     panel
       .querySelector("#prop-text-has-border")
@@ -961,28 +1083,17 @@ class App {
       this._openExportModal();
     });
 
-    // Save preset
-    document
-      .getElementById("btn-save-preset")
-      ?.addEventListener("click", async () => {
-        const name = prompt("Nome do preset:");
-        if (!name) return;
-        try {
-          const thumbnail = await this.exporter.generateThumbnail();
-          await PresetsDB.save({
-            name,
-            formatId: this.canvas.getState().formatId,
-            state: this.canvas.getState(),
-            thumbnail,
-            brandId: this.brands.getCurrentBrandId(),
-          });
-          toast("Preset salvo!", "success");
-          await this._refreshPresetsTab();
-        } catch (e) {
-          toast("Erro ao salvar preset.", "error");
-          console.error(e);
-        }
-      });
+    const savePresetBtn = document.getElementById("btn-save-preset");
+    savePresetBtn?.addEventListener("click", () => {
+      clearTimeout(this._savePresetClickTimer);
+      this._savePresetClickTimer = setTimeout(() => {
+        this._savePresetByNameFlow();
+      }, 260);
+    });
+    savePresetBtn?.addEventListener("dblclick", () => {
+      clearTimeout(this._savePresetClickTimer);
+      this._savePresetByNameFlow();
+    });
 
     document
       .getElementById("btn-export-brand")
@@ -1000,10 +1111,18 @@ class App {
           console.error(e);
         }
       });
+    document.getElementById("btn-share")?.addEventListener("click", () => {
+      this._openShareModal();
+    });
+    document.getElementById("btn-ai")?.addEventListener("click", async () => {
+      this._openAISidePanel();
+    });
 
     document
       .getElementById("btn-projects-home")
       ?.addEventListener("click", async () => {
+        const canLeave = await this._confirmLeaveCurrentProject();
+        if (!canLeave) return;
         await this._renderProjectsHome();
         this._showProjectsHome(true);
       });
@@ -1453,6 +1572,19 @@ class App {
           console.error(e);
         }
       });
+    document
+      .getElementById("btn-export-svg")
+      ?.addEventListener("click", async () => {
+        document.getElementById("export-modal")?.classList.remove("open");
+        toast("Exportando SVG...", "info");
+        try {
+          await this.exporter.exportSVG();
+          toast("SVG exportado com sucesso!", "success");
+        } catch (e) {
+          toast("Erro ao exportar SVG.", "error");
+          console.error(e);
+        }
+      });
 
     document
       .getElementById("btn-export-gif")
@@ -1506,6 +1638,1803 @@ class App {
       });
   }
 
+  _wireShareModal() {
+    document
+      .getElementById("btn-close-share-modal")
+      ?.addEventListener("click", () => this._closeShareModal());
+    document.getElementById("share-modal")?.addEventListener("click", (e) => {
+      if (e.target?.id === "share-modal") this._closeShareModal();
+    });
+    document
+      .getElementById("btn-generate-share-code")
+      ?.addEventListener("click", async () => {
+        await this._generateShareCode();
+      });
+    document
+      .getElementById("btn-copy-share-code")
+      ?.addEventListener("click", async () => {
+        const el = document.getElementById("share-code-output");
+        const value = el?.value?.trim();
+        if (!value) {
+          toast("Gere um código antes de copiar.", "info");
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(value);
+          toast("Código copiado.", "success");
+        } catch {
+          toast("Não foi possível copiar automaticamente.", "error");
+        }
+      });
+    document
+      .getElementById("btn-apply-share-code")
+      ?.addEventListener("click", async () => {
+        await this._applyShareCode();
+      });
+  }
+
+  _openShareModal() {
+    document.getElementById("share-code-output").value = "";
+    document.getElementById("share-modal")?.classList.add("open");
+  }
+
+  _closeShareModal() {
+    document.getElementById("share-modal")?.classList.remove("open");
+  }
+
+  _wireAIModal() {
+    if (this._aiModalBound) return;
+    this._aiModalBound = true;
+    document
+      .getElementById("btn-close-ai-modal")
+      ?.addEventListener("click", () => {
+        document.getElementById("ai-modal")?.classList.remove("open");
+      });
+    document.getElementById("ai-modal")?.addEventListener("click", (e) => {
+      if (e.target?.id === "ai-modal") {
+        document.getElementById("ai-modal")?.classList.remove("open");
+      }
+    });
+    document
+      .getElementById("btn-ai-save-config")
+      ?.addEventListener("click", async () => {
+        await this._saveAIConfig();
+      });
+    document
+      .getElementById("btn-ai-add-docs")
+      ?.addEventListener("click", async () => {
+        await this._addAIDocs();
+      });
+    document
+      .getElementById("btn-ai-generate-post")
+      ?.addEventListener("click", async () => {
+        await this._requestAIResponse();
+      });
+    document
+      .getElementById("btn-ai-plan")
+      ?.addEventListener("click", async () => {
+        await this._requestAIResponse();
+      });
+    document
+      .getElementById("btn-ai-apply-partial")
+      ?.addEventListener("click", async () => {
+        await this._applyAIPending(false);
+      });
+    document
+      .getElementById("btn-ai-apply-all")
+      ?.addEventListener("click", async () => {
+        await this._applyAIPending(true);
+      });
+    document
+      .getElementById("btn-ai-undo-last")
+      ?.addEventListener("click", async () => {
+        await this._undoLastAIApply();
+      });
+    document
+      .getElementById("btn-ai-clear-chat")
+      ?.addEventListener("click", () => {
+        this._aiChatHistory = [];
+        this._aiPendingResponse = null;
+        this._aiPendingCursor = 0;
+        this._renderAIChat();
+        this._renderAIActionStatus();
+      });
+    document
+      .getElementById("btn-ai-side-close")
+      ?.addEventListener("click", () => this._closeAISidePanel());
+    document
+      .getElementById("btn-ai-open-config")
+      ?.addEventListener("click", async () => {
+        await this._openAIModal();
+      });
+    document
+      .getElementById("btn-ai-side-send")
+      ?.addEventListener("click", async () => {
+        await this._requestAIResponse();
+      });
+    document
+      .getElementById("ai-side-prompt")
+      ?.addEventListener("keydown", async (e) => {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          await this._requestAIResponse();
+        }
+      });
+    document
+      .getElementById("btn-ai-side-plan")
+      ?.addEventListener("click", async () => {
+        await this._requestAIResponse();
+      });
+    document
+      .getElementById("btn-ai-side-partial")
+      ?.addEventListener("click", async () => {
+        await this._applyAIPending(false);
+      });
+    document
+      .getElementById("btn-ai-side-all")
+      ?.addEventListener("click", async () => {
+        await this._applyAIPending(true);
+      });
+    document
+      .getElementById("btn-ai-side-undo")
+      ?.addEventListener("click", async () => {
+        await this._undoLastAIApply();
+      });
+    document
+      .getElementById("btn-ai-side-clear")
+      ?.addEventListener("click", () => {
+        this._aiChatHistory = [];
+        this._aiPendingResponse = null;
+        this._aiPendingCursor = 0;
+        const sidePrompt = document.getElementById("ai-side-prompt");
+        if (sidePrompt) sidePrompt.value = "";
+        this._renderAIChat();
+        this._renderAIActionStatus();
+      });
+    document
+      .getElementById("btn-close-ai-doc-modal")
+      ?.addEventListener("click", () => this._closeAIDocModal());
+    document.getElementById("ai-doc-modal")?.addEventListener("click", (e) => {
+      if (e.target?.id === "ai-doc-modal") this._closeAIDocModal();
+    });
+    document
+      .getElementById("btn-save-ai-doc-modal")
+      ?.addEventListener("click", async () => {
+        await this._saveAIDocModal();
+      });
+    document
+      .getElementById("ai-provider")
+      ?.addEventListener("change", () => this._applyAIProviderDefaults());
+    const syncBasePreset = (value) => {
+      this._aiBasePresetId = value ?? "";
+      const a = document.getElementById("ai-base-preset");
+      const b = document.getElementById("ai-side-base-preset");
+      if (a && a.value !== this._aiBasePresetId) a.value = this._aiBasePresetId;
+      if (b && b.value !== this._aiBasePresetId) b.value = this._aiBasePresetId;
+      if (this._aiBasePresetId) {
+        const preset = this._aiPresetsCache.find(
+          (p) => p.id === this._aiBasePresetId,
+        );
+        if (preset)
+          this._pushAIProgress(`Preset base definido: ${preset.name}`);
+      } else {
+        this._pushAIProgress(
+          "Preset base limpo. Usando slide atual como referência.",
+        );
+      }
+    };
+    document
+      .getElementById("ai-base-preset")
+      ?.addEventListener("change", (e) => syncBasePreset(e.target.value));
+    document
+      .getElementById("ai-side-base-preset")
+      ?.addEventListener("change", (e) => syncBasePreset(e.target.value));
+    this._initAIStructuredPromptControls();
+  }
+
+  async _openAISidePanel() {
+    const panel = document.getElementById("ai-side-panel");
+    if (!panel) return;
+    panel.style.transform = "translateX(0)";
+    this._aiSideOpen = true;
+    const brandId = this.brands.getCurrentBrandId();
+    if (brandId) {
+      this._aiPresetsCache = await PresetsDB.getAll();
+      this._renderAIPresetSelectors();
+    }
+    this._syncAIStructuredDefaultsFromCanvas();
+    this._renderAIChat();
+    this._renderAIActionStatus();
+  }
+
+  _closeAISidePanel() {
+    const panel = document.getElementById("ai-side-panel");
+    if (!panel) return;
+    panel.style.transform = "translateX(100%)";
+    this._aiSideOpen = false;
+  }
+
+  async _openAIModal() {
+    const brandId = this.brands.getCurrentBrandId();
+    const configs = await AIConfigDB.getByBrand(brandId);
+    const config = configs.sort(
+      (a, b) =>
+        new Date(b.updatedAt || b.createdAt) -
+        new Date(a.updatedAt || a.createdAt),
+    )[0];
+    this._aiConfigId = config?.id ?? null;
+    document.getElementById("ai-provider").value =
+      config?.provider ?? "minimax";
+    document.getElementById("ai-model").value = config?.model ?? "MiniMax-M2.7";
+    document.getElementById("ai-endpoint").value =
+      config?.endpoint ??
+      this._getDefaultEndpoint(config?.provider ?? "minimax");
+    document.getElementById("ai-api-key").value = config?.apiKey ?? "";
+    document.getElementById("ai-temperature").value = String(
+      config?.temperature ?? 0.8,
+    );
+    this._applyAIProviderDefaults();
+    this._aiDocs = await BrandDocsDB.getByBrand(brandId);
+    this._aiPresetsCache = await PresetsDB.getAll();
+    this._renderAIPresetSelectors();
+    this._renderAIDocsList();
+    this._renderAIChat();
+    this._renderAIActionStatus();
+    document.getElementById("ai-modal")?.classList.add("open");
+  }
+
+  async _saveAIConfig() {
+    const brandId = this.brands.getCurrentBrandId();
+    if (!brandId) {
+      toast("Selecione uma marca para configurar IA.", "error");
+      return;
+    }
+    const provider = document.getElementById("ai-provider")?.value ?? "minimax";
+    const model = document.getElementById("ai-model")?.value?.trim() ?? "";
+    const endpoint =
+      document.getElementById("ai-endpoint")?.value?.trim() ?? "";
+    const apiKeyInput =
+      document.getElementById("ai-api-key")?.value?.trim() ?? "";
+    const temperature = parseFloat(
+      document.getElementById("ai-temperature")?.value ?? "0.8",
+    );
+    const existingList = await AIConfigDB.getByBrand(brandId);
+    const existing = existingList.sort(
+      (a, b) =>
+        new Date(b.updatedAt || b.createdAt) -
+        new Date(a.updatedAt || a.createdAt),
+    )[0];
+    const id = this._aiConfigId ?? existing?.id;
+    const apiKey = apiKeyInput || existing?.apiKey || "";
+    const saved = await AIConfigDB.save({
+      id,
+      brandId,
+      provider,
+      model:
+        model ||
+        (provider === "openai"
+          ? "gpt-4o-mini"
+          : provider === "minimax_token_plan"
+            ? "MiniMax-M2.7"
+            : "MiniMax-M2.7"),
+      endpoint,
+      apiKey,
+      temperature: Number.isFinite(temperature) ? temperature : 0.8,
+    });
+    this._aiConfigId =
+      typeof saved === "string" ? saved : (id ?? this._aiConfigId);
+    if (!apiKeyInput && existing?.apiKey) {
+      document.getElementById("ai-api-key").value = existing.apiKey;
+    }
+    toast("Configuração de IA salva localmente.", "success");
+  }
+
+  async _addAIDocs() {
+    const brandId = this.brands.getCurrentBrandId();
+    if (!brandId) {
+      toast("Selecione uma marca antes de anexar arquivos.", "error");
+      return;
+    }
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.accept = "*/*";
+    input.addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files ?? []);
+      for (const file of files) {
+        const content = await this._extractDocContent(file);
+        await BrandDocsDB.save({
+          brandId,
+          name: file.name,
+          mimeType: file.type || "application/octet-stream",
+          content,
+        });
+      }
+      this._aiDocs = await BrandDocsDB.getByBrand(brandId);
+      this._renderAIDocsList();
+      toast("Arquivos anexados à marca.", "success");
+    });
+    input.click();
+  }
+
+  async _extractDocContent(file) {
+    const name = file.name?.toLowerCase?.() ?? "";
+    const isTextLike =
+      file.type.startsWith("text/") ||
+      name.endsWith(".md") ||
+      name.endsWith(".txt") ||
+      name.endsWith(".json") ||
+      name.endsWith(".csv") ||
+      name.endsWith(".xml");
+    if (isTextLike) {
+      return await BrandManager.readFileAsText(file);
+    }
+    const b64 = await BrandManager.readFileAsBase64(file);
+    return `[ARQUIVO_BINARIO:${file.name}] ${b64.slice(0, 1200)}`;
+  }
+
+  _renderAIDocsList() {
+    const list = document.getElementById("ai-docs-list");
+    if (!list) return;
+    if (!this._aiDocs.length) {
+      list.innerHTML =
+        '<div class="text-xs text-muted" style="padding:8px;">Nenhum arquivo anexado.</div>';
+      return;
+    }
+    list.innerHTML = "";
+    this._aiDocs.forEach((doc) => {
+      const row = document.createElement("div");
+      row.style.cssText =
+        "display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:6px 8px;";
+      row.innerHTML = `
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${doc.name}</div>
+          <div class="text-xs text-muted">${doc.mimeType || "arquivo"}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" data-doc-view="${doc.id}">Ver</button>
+        ${
+          this._isEditableAIDoc(doc)
+            ? `<button class="btn btn-ghost btn-sm" data-doc-edit="${doc.id}">Editar</button>`
+            : ""
+        }
+        <button class="btn btn-ghost btn-sm" data-doc-del="${doc.id}">Excluir</button>
+      `;
+      row
+        .querySelector("[data-doc-view]")
+        ?.addEventListener("click", () => this._openAIDocModal(doc, false));
+      row
+        .querySelector("[data-doc-edit]")
+        ?.addEventListener("click", () => this._openAIDocModal(doc, true));
+      row
+        .querySelector("[data-doc-del]")
+        ?.addEventListener("click", async () => {
+          await BrandDocsDB.delete(doc.id);
+          this._aiDocs = this._aiDocs.filter((d) => d.id !== doc.id);
+          this._renderAIDocsList();
+        });
+      list.appendChild(row);
+    });
+  }
+
+  _isEditableAIDoc(doc) {
+    const mime = String(doc?.mimeType ?? "").toLowerCase();
+    const name = String(doc?.name ?? "").toLowerCase();
+    return (
+      mime.startsWith("text/") ||
+      name.endsWith(".txt") ||
+      name.endsWith(".md") ||
+      name.endsWith(".markdown")
+    );
+  }
+
+  _openAIDocModal(doc, editable) {
+    const modal = document.getElementById("ai-doc-modal");
+    const title = document.getElementById("ai-doc-modal-title");
+    const content = document.getElementById("ai-doc-modal-content");
+    const saveBtn = document.getElementById("btn-save-ai-doc-modal");
+    if (!modal || !title || !content || !saveBtn || !doc) return;
+    modal.dataset.docId = doc.id;
+    modal.dataset.editable = editable ? "1" : "0";
+    title.textContent = editable
+      ? `Editar: ${doc.name}`
+      : `Visualizar: ${doc.name}`;
+    content.value = String(doc.content ?? "");
+    content.readOnly = !editable;
+    saveBtn.style.display = editable ? "" : "none";
+    modal.classList.add("open");
+  }
+
+  _closeAIDocModal() {
+    const modal = document.getElementById("ai-doc-modal");
+    if (!modal) return;
+    modal.classList.remove("open");
+    modal.dataset.docId = "";
+  }
+
+  async _saveAIDocModal() {
+    const modal = document.getElementById("ai-doc-modal");
+    const content = document.getElementById("ai-doc-modal-content");
+    if (!modal || !content) return;
+    const docId = modal.dataset.docId;
+    if (!docId) return;
+    const doc = await BrandDocsDB.get(docId);
+    if (!doc) {
+      toast("Documento não encontrado.", "error");
+      return;
+    }
+    await BrandDocsDB.save({
+      ...doc,
+      content: content.value,
+    });
+    const brandId = this.brands.getCurrentBrandId();
+    this._aiDocs = await BrandDocsDB.getByBrand(brandId);
+    this._renderAIDocsList();
+    this._closeAIDocModal();
+    toast("Documento atualizado.", "success");
+  }
+
+  async _requestAIResponse() {
+    if (this._aiBusy) {
+      this._pushAIProgress("IA ainda processando a solicitação anterior...");
+      return;
+    }
+    this._openAISidePanel();
+    const brandId = this.brands.getCurrentBrandId();
+    if (!brandId) {
+      this._pushAIProgress("Selecione uma marca antes de enviar para a IA.");
+      toast("Selecione uma marca para usar IA.", "error");
+      return;
+    }
+    await this._saveAIConfig();
+    const cfgs = await AIConfigDB.getByBrand(brandId);
+    const cfg = cfgs.sort(
+      (a, b) =>
+        new Date(b.updatedAt || b.createdAt) -
+        new Date(a.updatedAt || a.createdAt),
+    )[0];
+    if (!cfg?.apiKey) {
+      this._pushAIProgress(
+        "API key ausente. Abra Config no chat lateral e salve a chave.",
+      );
+      await this._openAIModal();
+      toast("Informe API key para gerar com IA.", "error");
+      return;
+    }
+    const prompt = this._consumeAIPrompt();
+    if (!prompt) {
+      this._pushAIProgress(
+        "Digite uma mensagem no chat para gerar alterações.",
+      );
+      toast("Digite o prompt para gerar o post.", "error");
+      return;
+    }
+    this._aiPresetsCache = await PresetsDB.getAll();
+    const brief = this._buildAIStructuredBrief();
+    const effectivePrompt = this._composeAIPrompt(prompt, brief);
+    if (await this._handleAIPresetCommand(prompt)) return;
+    this._aiChatHistory.push({ role: "user", content: prompt });
+    this._renderAIChat();
+    this._pushAIProgress("Iniciando geração com IA...");
+    const brand = await this.brands.getCurrentBrand();
+    this._pushAIProgress("Carregando documentos e contexto da marca...");
+    this._aiDocs = await BrandDocsDB.getByBrand(brandId);
+    const { docContext, docMeta } = this._buildAIDocContext(this._aiDocs);
+    this._pushAIBasisContext({
+      prompt,
+      brand,
+      docs: this._aiDocs,
+      docMeta,
+      brief,
+    });
+    const brandContext = JSON.stringify(
+      {
+        name: brand?.name,
+        description: brand?.description,
+        palette: brand?.palette,
+      },
+      null,
+      2,
+    );
+    try {
+      this._aiBusy = true;
+      this._pushAIProgress(
+        `Config IA: provider=${cfg.provider}, model=${cfg.model}, endpoint=${cfg.endpoint || "auto"}`,
+      );
+      this._pushAIProgress("Chamando modelo e aguardando resposta...");
+      const tools = await this._buildAIMCPTools(brandId, brief);
+      const historyForAI = this._buildHistoryForAI(
+        this._aiChatHistory.slice(-16),
+        prompt,
+        effectivePrompt,
+      );
+      const out = await aiEngine.chatWithTools({
+        provider: cfg.provider,
+        model: cfg.model,
+        endpoint: cfg.endpoint,
+        apiKey: cfg.apiKey,
+        chatHistory: historyForAI,
+        brandContext,
+        docContext,
+        currentFormatId: this.canvas.getState().formatId,
+        tools,
+        temperature: cfg.temperature ?? 0.8,
+      });
+      this._ensureAISlideCountIntent(
+        out,
+        prompt,
+        brief.postCount,
+        brief.formatId,
+      );
+      this._aiChatHistory.push({
+        role: "assistant",
+        content: out.assistantMessage || "Ajustei o post conforme solicitado.",
+      });
+      this._renderAIChat();
+      this._pushAIRawResponse(out);
+      this._pushAIProgress(
+        "Resposta recebida. Aplicando ações em tempo real...",
+      );
+      this._aiPendingResponse = out;
+      this._aiPendingCursor = 0;
+      this._renderAIActionStatus();
+      await this._applyAIPending(true);
+    } catch (e) {
+      toast(`Erro na IA: ${e.message || "falha"}`, "error");
+      this._pushAIProgress(`Erro da IA: ${e.message || "falha"}`);
+      console.error(e);
+    } finally {
+      this._aiBusy = false;
+    }
+  }
+
+  async _applyAIPending(applyAll = false) {
+    const out = this._aiPendingResponse;
+    if (!out) {
+      toast("Não há plano pendente da IA.", "info");
+      return;
+    }
+    const actions = Array.isArray(out.actions) ? out.actions : [];
+    const hasActions = actions.length > 0;
+    const onlyPlan = !hasActions && !!out.plan;
+    if (!hasActions && !out.plan) {
+      toast("A resposta atual não possui ações aplicáveis.", "info");
+      return;
+    }
+    this._pushAIUndoSnapshot();
+    try {
+      if (onlyPlan) {
+        if (!this._hasMeaningfulPlan(out.plan)) {
+          this._aiPendingResponse = null;
+          this._aiPendingCursor = 0;
+          this._renderAIActionStatus();
+          this._pushAIProgress(
+            "A IA não retornou plano aplicável. Peça conteúdo/cópia explícita no prompt.",
+          );
+          return;
+        }
+        this._pushAIProgress("Aplicando plano completo...");
+        this._applyAIPostPlan(out.plan);
+        this._aiPendingResponse = null;
+        this._aiPendingCursor = 0;
+        this._renderAIActionStatus();
+        this._pushAIProgress("Concluído. Plano aplicado no canvas.");
+        toast("Plano aplicado.", "success");
+        return;
+      }
+      const start = this._aiPendingCursor;
+      const end = applyAll
+        ? actions.length
+        : Math.min(actions.length, start + 1);
+      let appliedAny = false;
+      let appliedPlanByAction = false;
+      for (let i = start; i < end; i++) {
+        const action = actions[i];
+        this._pushAIProgress(
+          `Executando ${i + 1}/${actions.length}: ${this._humanizeAIAction(action?.type)}`,
+        );
+        const ok = await this._executeSingleAIAction(action, out);
+        appliedAny = appliedAny || !!ok;
+        if (action?.type === "apply_plan" && ok) appliedPlanByAction = true;
+        await this._wait(160);
+      }
+      if (
+        applyAll &&
+        this._hasMeaningfulPlan(out?.plan) &&
+        !appliedPlanByAction
+      ) {
+        this._pushAIProgress(
+          "Aplicando conteúdo do plano após ações para preencher textos...",
+        );
+        this._applyAIPostPlan(out.plan);
+        appliedAny = true;
+      }
+      if (!appliedAny) {
+        const fallback = this._applyAssistantMessageFallback(
+          out?.assistantMessage,
+        );
+        if (fallback) {
+          this._pushAIProgress(
+            "Fallback aplicado: conteúdo inserido no primeiro campo de texto.",
+          );
+          appliedAny = true;
+        }
+      }
+      this._aiPendingCursor = end;
+      if (this._aiPendingCursor >= actions.length) {
+        this._aiPendingResponse = null;
+        this._aiPendingCursor = 0;
+        this._renderAIActionStatus();
+        this._pushAIProgress(
+          appliedAny
+            ? "Concluído. Todas as ações da IA foram aplicadas."
+            : "Concluído sem alterações visíveis. Ajuste o prompt para gerar textos/slides.",
+        );
+        return;
+      }
+      this._renderAIActionStatus();
+      toast(
+        `Ação ${this._aiPendingCursor}/${actions.length} aplicada.`,
+        "success",
+      );
+    } catch (e) {
+      this._pushAIProgress(
+        `Erro ao aplicar ações: ${e?.message || "falha inesperada"}`,
+      );
+      toast("Falha ao aplicar ações da IA.", "error");
+      console.error(e);
+    }
+  }
+
+  async _undoLastAIApply() {
+    const snap = this._aiUndoStack.pop();
+    if (!snap) {
+      toast("Sem ações da IA para desfazer.", "info");
+      return;
+    }
+    this._loadingProject = true;
+    try {
+      this.canvas.setState(snap.canvasState);
+      await this.slides.loadSlides(snap.slides, snap.activeSlideIndex);
+      this._fitCanvas();
+      this._updateFormatBadge(this.canvas.getState().formatId);
+      this._updateGradientBar();
+      toast("Última aplicação da IA desfeita.", "success");
+    } finally {
+      this._loadingProject = false;
+    }
+  }
+
+  _renderAIChat() {
+    const targets = [
+      document.getElementById("ai-chat-log"),
+      document.getElementById("ai-side-chat-log"),
+    ].filter(Boolean);
+    targets.forEach((box) => {
+      if (!this._aiChatHistory.length) {
+        box.innerHTML =
+          '<div class="text-xs text-muted">Converse com a IA. Ela pode criar páginas, usar templates e adicionar ícones.</div>';
+        return;
+      }
+      box.innerHTML = "";
+      this._aiChatHistory.forEach((msg) => {
+        const line = document.createElement("div");
+        const isUser = msg.role === "user";
+        const isProgress = msg.role === "system";
+        line.style.cssText = `
+          max-width: 92%;
+          justify-self: ${isUser ? "end" : "start"};
+          background: ${isProgress ? "transparent" : isUser ? "var(--accent-bg)" : "var(--surface-2)"};
+          border: ${isProgress ? "0" : `1px solid ${isUser ? "var(--border-accent)" : "var(--border)"}`};
+          border-radius: 8px;
+          padding: ${isProgress ? "2px 0" : "6px 8px"};
+          font-size: 12px;
+          white-space: pre-wrap;
+          color: ${isProgress ? "var(--text-muted)" : "var(--text-primary)"};
+          font-style: ${isProgress ? "italic" : "normal"};
+        `;
+        line.textContent = msg.content;
+        box.appendChild(line);
+      });
+      box.scrollTop = box.scrollHeight;
+    });
+  }
+
+  async _buildAIMCPTools(brandId, brief = null) {
+    const presets = await PresetsDB.getAll();
+    this._aiPresetsCache = presets;
+    const basePreset = this._aiBasePresetId
+      ? presets.find((p) => p.id === this._aiBasePresetId)
+      : null;
+    return [
+      {
+        name: "base_preset_policy",
+        description:
+          "Sempre respeitar o preset base e alterar prioritariamente somente textos, sem quebrar layout.",
+        selectedBasePreset: basePreset
+          ? { id: basePreset.id, name: basePreset.name }
+          : null,
+        required: brief
+          ? {
+              postCount: brief.postCount,
+              formatId: brief.formatId,
+              network: brief.network || "auto",
+            }
+          : null,
+      },
+      {
+        name: "apply_plan",
+        description: "Aplicar plano completo no post atual",
+      },
+      {
+        name: "create_pages",
+        description: "Criar múltiplas páginas/slides",
+      },
+      {
+        name: "use_template",
+        description: "Aplicar template/preset existente",
+        availablePresets: presets.map((p) => ({ id: p.id, name: p.name })),
+      },
+      {
+        name: "add_icon",
+        description: "Adicionar ícone (iconId do Iconify) no slide atual",
+      },
+      {
+        name: "add_text",
+        description: "Adicionar texto no slide atual",
+      },
+    ];
+  }
+
+  async _executeSingleAIAction(action, out) {
+    const type = action?.type;
+    const payload = action?.payload ?? {};
+    if (type === "apply_plan") {
+      if (!this._hasMeaningfulPlan(out?.plan)) return false;
+      this._applyAIPostPlan(out.plan);
+      return true;
+    }
+    if (type === "create_pages") {
+      return await this._aiCreatePages(payload, !!payload?.replaceAll);
+    }
+    if (type === "use_template") {
+      return await this._aiUseTemplate(payload);
+    }
+    if (type === "add_icon") {
+      return await this._aiAddIcon(payload);
+    }
+    if (type === "add_text") {
+      return this._aiAddText(payload);
+    }
+    return false;
+  }
+
+  _pushAIUndoSnapshot() {
+    this._aiUndoStack.push({
+      canvasState: structuredClone(this.canvas.getState()),
+      slides: this.slides.getSlides().map((s) => ({
+        id: s.id,
+        state: structuredClone(s.state),
+        thumb: s.thumb ?? "",
+      })),
+      activeSlideIndex: this.slides.getActiveIndex(),
+    });
+    if (this._aiUndoStack.length > 20) this._aiUndoStack.shift();
+  }
+
+  _renderAIActionStatus() {
+    const els = [
+      document.getElementById("ai-action-status"),
+      document.getElementById("ai-side-action-status"),
+    ].filter(Boolean);
+    els.forEach((el) => {
+      if (!this._aiPendingResponse) {
+        el.textContent = "Sem plano pendente.";
+        return;
+      }
+      const actions = Array.isArray(this._aiPendingResponse.actions)
+        ? this._aiPendingResponse.actions
+        : [];
+      if (!actions.length && this._aiPendingResponse.plan) {
+        el.textContent = "Plano pronto para aplicar.";
+        return;
+      }
+      el.textContent = `Ações pendentes: ${Math.max(
+        0,
+        actions.length - this._aiPendingCursor,
+      )} de ${actions.length}.`;
+    });
+  }
+
+  _initAIStructuredPromptControls() {
+    const formatSelect = document.getElementById("ai-side-format");
+    if (!formatSelect || formatSelect.options.length > 0) return;
+    Object.values(FORMATS).forEach((fmt) => {
+      const op = document.createElement("option");
+      op.value = fmt.id;
+      op.textContent = `${fmt.label} (${fmt.platform})`;
+      formatSelect.appendChild(op);
+    });
+    formatSelect.addEventListener("change", () => {
+      const networkSelect = document.getElementById("ai-side-network");
+      if (!networkSelect) return;
+      if (!networkSelect.value) {
+        const platform = FORMATS[formatSelect.value]?.platform || "";
+        networkSelect.value = this._normalizePlatformToNetwork(platform);
+      }
+    });
+    this._syncAIStructuredDefaultsFromCanvas();
+  }
+
+  _syncAIStructuredDefaultsFromCanvas() {
+    const state = this.canvas?.getState?.();
+    const currentFormatId = state?.formatId || "ig-feed-square";
+    const formatSelect = document.getElementById("ai-side-format");
+    const networkSelect = document.getElementById("ai-side-network");
+    if (formatSelect && !formatSelect.value) {
+      formatSelect.value = currentFormatId;
+    }
+    if (networkSelect && !networkSelect.value) {
+      const platform = FORMATS[formatSelect?.value]?.platform || "";
+      networkSelect.value = this._normalizePlatformToNetwork(platform);
+    }
+  }
+
+  _normalizePlatformToNetwork(platform) {
+    const p = String(platform || "").toLowerCase();
+    if (p.includes("instagram")) return "instagram";
+    if (p.includes("facebook")) return "facebook";
+    if (p.includes("linkedin")) return "linkedin";
+    if (p.includes("tiktok")) return "tiktok";
+    if (p.includes("youtube")) return "youtube";
+    if (p.includes("x")) return "x";
+    if (p.includes("thread")) return "threads";
+    return "";
+  }
+
+  _buildAIStructuredBrief() {
+    const postCount = Math.max(
+      1,
+      Math.min(
+        12,
+        parseInt(
+          document.getElementById("ai-side-post-count")?.value ?? "1",
+          10,
+        ) || 1,
+      ),
+    );
+    const formatId =
+      document.getElementById("ai-side-format")?.value ||
+      this.canvas.getState().formatId;
+    const formatLabel = FORMATS[formatId]?.label || formatId;
+    const network = document.getElementById("ai-side-network")?.value || "";
+    const goal = document.getElementById("ai-side-goal")?.value?.trim() || "";
+    return { postCount, formatId, formatLabel, network, goal };
+  }
+
+  _composeAIPrompt(subjectPrompt, brief) {
+    const lines = [
+      "REQUISITOS ESTRUTURADOS:",
+      `- quantidade_posts: ${brief.postCount}`,
+      `- format_id: ${brief.formatId}`,
+      `- format_label: ${brief.formatLabel}`,
+      `- rede_social: ${brief.network || "auto"}`,
+      `- objetivo_cta: ${brief.goal || "não informado"}`,
+      "",
+      "PEDIDO DO USUÁRIO:",
+      subjectPrompt,
+    ];
+    return lines.join("\n");
+  }
+
+  _buildHistoryForAI(history, rawPrompt, effectivePrompt) {
+    const arr = Array.isArray(history) ? history.map((m) => ({ ...m })) : [];
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (
+        arr[i].role === "user" &&
+        String(arr[i].content).trim() === rawPrompt.trim()
+      ) {
+        arr[i].content = effectivePrompt;
+        break;
+      }
+    }
+    return arr;
+  }
+
+  _getDefaultEndpoint(provider) {
+    const p = String(provider || "minimax").toLowerCase();
+    if (p === "openai") return "https://api.openai.com/v1/chat/completions";
+    if (p === "minimax_token_plan")
+      return "https://api.minimax.io/anthropic/v1/messages";
+    if (p === "compatible") return "";
+    return "https://api.minimax.io/v1/text/chatcompletion_v2";
+  }
+
+  _getDefaultModel(provider) {
+    const p = String(provider || "minimax").toLowerCase();
+    if (p === "openai") return "gpt-4o-mini";
+    return "MiniMax-M2.7";
+  }
+
+  _applyAIProviderDefaults() {
+    const provider = document.getElementById("ai-provider")?.value ?? "minimax";
+    const endpointEl = document.getElementById("ai-endpoint");
+    const modelEl = document.getElementById("ai-model");
+    if (endpointEl && !endpointEl.value.trim()) {
+      endpointEl.value = this._getDefaultEndpoint(provider);
+    }
+    if (modelEl && !modelEl.value.trim()) {
+      modelEl.value = this._getDefaultModel(provider);
+    }
+  }
+
+  _renderAIPresetSelectors() {
+    const selects = [
+      document.getElementById("ai-base-preset"),
+      document.getElementById("ai-side-base-preset"),
+    ].filter(Boolean);
+    selects.forEach((sel) => {
+      const current = this._aiBasePresetId || "";
+      sel.innerHTML = '<option value="">Atual (sem preset fixo)</option>';
+      this._aiPresetsCache.forEach((p) => {
+        const op = document.createElement("option");
+        op.value = p.id;
+        op.textContent = p.name;
+        sel.appendChild(op);
+      });
+      sel.value = current;
+    });
+  }
+
+  async _handleAIPresetCommand(prompt) {
+    const text = String(prompt ?? "").trim();
+    if (!text.toLowerCase().startsWith("/preset")) return false;
+    const arg = text.replace(/^\/preset\s*/i, "").trim();
+    if (!arg || arg.toLowerCase() === "atual" || arg.toLowerCase() === "none") {
+      this._aiBasePresetId = "";
+      this._renderAIPresetSelectors();
+      this._pushAIProgress("Preset base removido. A IA usará o estado atual.");
+      return true;
+    }
+    const target = this._aiPresetsCache.find((p) =>
+      p.name.toLowerCase().includes(arg.toLowerCase()),
+    );
+    if (!target) {
+      this._pushAIProgress(`Preset não encontrado: "${arg}"`);
+      return true;
+    }
+    this._aiBasePresetId = target.id;
+    this._renderAIPresetSelectors();
+    this._pushAIProgress(`Preset base definido via chat: ${target.name}`);
+    return true;
+  }
+
+  _pushAIProgress(message) {
+    if (!message) return;
+    this._aiChatHistory.push({
+      role: "system",
+      content: `• ${message}`,
+    });
+    this._renderAIChat();
+  }
+
+  _pushAIBasisContext({ prompt, brand, docs, docMeta, brief }) {
+    const preset = this._aiBasePresetId
+      ? this._aiPresetsCache.find((p) => p.id === this._aiBasePresetId)
+      : null;
+    const topic = this._extractPromptTopic(prompt);
+    const docsForLine = (docMeta ?? [])
+      .slice(0, 8)
+      .map((d) => `${d.name} (${d.chars} chars, ${d.kind})`);
+    const docLine = docsForLine.length
+      ? docsForLine.join(", ")
+      : "Nenhum documento anexado";
+    const palette = Array.isArray(brand?.palette)
+      ? brand.palette.slice(0, 6)
+      : [];
+    const paletteLine = palette.length
+      ? palette
+          .map((c) => this._formatBrandColor(c))
+          .filter(Boolean)
+          .join(", ")
+      : "Sem paleta definida";
+    const summary = [
+      "Base usada pela IA:",
+      `- Preset base: ${preset?.name || "Atual (sem preset fixo)"}`,
+      `- Marca: ${brand?.name || "Sem nome"}`,
+      `- Paleta: ${paletteLine}`,
+      `- Materiais enviados para IA: ${docLine}`,
+      `- Arquivos no pacote de contexto: ${(docMeta ?? []).length}`,
+      `- Quantidade solicitada: ${brief?.postCount || 1}`,
+      `- Formato solicitado: ${brief?.formatLabel || brief?.formatId || "auto"}`,
+      `- Rede social alvo: ${brief?.network || "auto"}`,
+      `- Objetivo/CTA: ${brief?.goal || "não informado"}`,
+      `- Tema solicitado: ${topic}`,
+      "- Política: preservar template e priorizar preenchimento de conteúdo",
+    ].join("\n");
+    this._aiChatHistory.push({
+      role: "system",
+      content: summary,
+    });
+    this._renderAIChat();
+  }
+
+  _formatBrandColor(entry) {
+    if (typeof entry === "string") return entry;
+    if (!entry || typeof entry !== "object") return "";
+    return (
+      entry.hex ||
+      entry.value ||
+      entry.color ||
+      (entry.name ? `${entry.name}` : "") ||
+      ""
+    );
+  }
+
+  _buildAIDocContext(docs) {
+    const items = Array.isArray(docs) ? docs : [];
+    const meta = [];
+    let buffer = "";
+    for (const doc of items) {
+      const name = String(doc?.name ?? "documento");
+      const raw = String(doc?.content ?? "");
+      const lower = name.toLowerCase();
+      const isMd = lower.endsWith(".md") || lower.endsWith(".markdown");
+      const isText = this._isEditableAIDoc(doc) || isMd;
+      const prepared = isText ? this._normalizeMarkdownForAI(raw) : raw;
+      const clipped = prepared.slice(0, isText ? 6000 : 1800);
+      const kind = isMd ? "md" : isText ? "text" : "bin";
+      meta.push({ name, chars: prepared.length, kind });
+      const chunk = `## ${name}\n[TIPO:${kind}] [CHARS:${prepared.length}]\n${clipped}\n\n`;
+      if ((buffer + chunk).length > 24000) break;
+      buffer += chunk;
+    }
+    return {
+      docContext: buffer.trim(),
+      docMeta: meta,
+    };
+  }
+
+  _normalizeMarkdownForAI(text) {
+    return String(text ?? "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\t/g, "  ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  _extractPromptTopic(prompt) {
+    const text = String(prompt ?? "").trim();
+    if (!text) return "Não informado";
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const first = lines[0] || text;
+    return first.length > 160 ? `${first.slice(0, 157)}...` : first;
+  }
+
+  _pushAIRawResponse(out) {
+    const actions = Array.isArray(out?.actions) ? out.actions : [];
+    const actionTypes = actions.map((a) => a?.type).filter(Boolean);
+    const planLayers = Array.isArray(out?.plan?.layers)
+      ? out.plan.layers.length
+      : 0;
+    const line = [
+      "Resposta IA (resumo):",
+      `- assistantMessage: ${String(out?.assistantMessage || "").slice(0, 180) || "(vazio)"}`,
+      `- actions: ${actionTypes.length ? actionTypes.join(", ") : "(nenhuma)"}`,
+      `- plan.layers: ${planLayers}`,
+    ].join("\n");
+    this._aiChatHistory.push({ role: "system", content: line });
+    this._renderAIChat();
+  }
+
+  _inferRequestedSlideCount(prompt) {
+    const text = String(prompt ?? "").toLowerCase();
+    if (!text) return 0;
+    const direct = text.match(/(\d+)\s*(slides?|p[aá]ginas?|posts?)/i);
+    if (direct) return Math.max(0, Math.min(12, Number(direct[1]) || 0));
+    const words = {
+      um: 1,
+      uma: 1,
+      dois: 2,
+      duas: 2,
+      tres: 3,
+      três: 3,
+      quatro: 4,
+      cinco: 5,
+      seis: 6,
+      sete: 7,
+      oito: 8,
+      nove: 9,
+      dez: 10,
+    };
+    for (const [k, v] of Object.entries(words)) {
+      if (
+        new RegExp(`\\b${k}\\b\\s*(slides?|p[aá]ginas?|posts?)`, "i").test(text)
+      )
+        return v;
+    }
+    return 0;
+  }
+
+  _ensureAISlideCountIntent(out, prompt, forcedCount = 0, forcedFormatId = "") {
+    if (!out || typeof out !== "object") return;
+    const requested = forcedCount || this._inferRequestedSlideCount(prompt);
+    if (requested <= 1) return;
+    const actions = Array.isArray(out.actions) ? out.actions : [];
+    const hasCreate = actions.some((a) => a?.type === "create_pages");
+    if (hasCreate) return;
+    out.actions = [
+      ...actions,
+      {
+        type: "create_pages",
+        payload: {
+          count: requested,
+          formatId: forcedFormatId || this.canvas.getState().formatId,
+          topic: this._extractPromptTopic(prompt),
+          replaceAll: false,
+        },
+      },
+    ];
+    this._pushAIProgress(
+      `Ajuste automático: adicionado create_pages para ${requested} slides.`,
+    );
+  }
+
+  _humanizeAIAction(type) {
+    const map = {
+      apply_plan: "aplicar plano",
+      create_pages: "criar páginas",
+      use_template: "usar template",
+      add_icon: "adicionar ícone",
+      add_text: "adicionar texto",
+    };
+    return map[type] || type || "ação";
+  }
+
+  _wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  _resolveAIBaseState() {
+    const preset = this._aiBasePresetId
+      ? this._aiPresetsCache.find((p) => p.id === this._aiBasePresetId)
+      : null;
+    if (preset?.state) return structuredClone(preset.state);
+    return structuredClone(this.canvas.getState());
+  }
+
+  _applyPlanTextsToState(state, plan) {
+    if (!state || !Array.isArray(state.layers)) return false;
+    const sourceTexts = (plan?.layers ?? [])
+      .filter((l) => l && l.type !== "shape")
+      .map((l) => String(l.content ?? "").trim())
+      .filter(Boolean);
+    if (!sourceTexts.length) return false;
+    const targetTextLayers = state.layers.filter((l) => l.type === "text");
+    if (!targetTextLayers.length) return false;
+    targetTextLayers.forEach((layer, i) => {
+      layer.content = sourceTexts[i] ?? sourceTexts[sourceTexts.length - 1];
+    });
+    return true;
+  }
+
+  _consumeAIPrompt() {
+    const side = document.getElementById("ai-side-prompt");
+    const modal = document.getElementById("ai-prompt");
+    const sideText = side?.value?.trim() ?? "";
+    const modalText = modal?.value?.trim() ?? "";
+    const text = sideText || modalText;
+    if (side) side.value = "";
+    if (modal) modal.value = "";
+    return text;
+  }
+
+  async _aiCreatePages(payload, replaceAll = false) {
+    const pagesInput = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.pages)
+        ? payload.pages
+        : [];
+    let pages = pagesInput;
+    if (!pages.length) {
+      const countRaw =
+        payload?.count ??
+        payload?.slides ??
+        payload?.total ??
+        payload?.quantity ??
+        0;
+      const count = Math.max(0, Math.min(12, Number(countRaw) || 0));
+      if (count > 0) {
+        const topic = String(payload?.topic || payload?.title || "Novo slide");
+        pages = Array.from({ length: count }).map((_, i) => ({
+          formatId: this.canvas.getState().formatId,
+          layers: [
+            {
+              type: "text",
+              name: `Título ${i + 1}`,
+              content: `${topic} ${count > 1 ? `#${i + 1}` : ""}`,
+              x: 50,
+              y: 40,
+              width: 84,
+              fontSize: 56,
+              color: "#FFFFFF",
+              align: "center",
+            },
+          ],
+        }));
+      }
+    }
+    if (!Array.isArray(pages) || !pages.length) return false;
+    const current = this.slides.getSlides();
+    const templateState = this._resolveAIBaseState();
+    const built = pages.slice(0, 12).map((page) => {
+      const base = structuredClone(templateState);
+      base.formatId = page?.formatId || base.formatId;
+      if (page?.background && typeof page.background === "object") {
+        base.background = { ...base.background, ...page.background };
+      }
+      const textCandidates = this._extractPageTextCandidates(page);
+      this._applyTextsToTemplateState(base, textCandidates);
+      return {
+        id: crypto.randomUUID(),
+        state: base,
+      };
+    });
+    const nextSlides = replaceAll ? built : [...current, ...built];
+    await this.slides.loadSlides(nextSlides, replaceAll ? 0 : current.length);
+    this._pushAIProgress(`${built.length} slide(s) criados.`);
+    return true;
+  }
+
+  _extractPageTextCandidates(page) {
+    const lines = [];
+    const push = (v) => {
+      const t = String(v ?? "").trim();
+      if (t) lines.push(t);
+    };
+    push(page?.title);
+    push(page?.headline);
+    push(page?.subtitle);
+    push(page?.subheadline);
+    push(page?.content);
+    push(page?.description);
+    if (Array.isArray(page?.bullets)) {
+      page.bullets.forEach((b) => push(`• ${String(b ?? "").trim()}`));
+    }
+    if (Array.isArray(page?.layers)) {
+      page.layers
+        .filter((l) => l && l.type !== "shape")
+        .forEach((l) => push(l.content));
+    }
+    if (!lines.length) {
+      push(page?.topic);
+    }
+    return lines;
+  }
+
+  _applyTextsToTemplateState(state, textCandidates) {
+    if (!state || !Array.isArray(state.layers)) return false;
+    const lines = Array.isArray(textCandidates)
+      ? textCandidates.map((t) => String(t ?? "").trim()).filter(Boolean)
+      : [];
+    if (!lines.length) return false;
+    const textLayers = state.layers.filter((l) => l.type === "text");
+    if (!textLayers.length) return false;
+    textLayers.forEach((layer, i) => {
+      const next = lines[i] ?? lines[lines.length - 1];
+      layer.content = next;
+      if (!Number.isFinite(layer.fontSize) || layer.fontSize <= 0) {
+        layer.fontSize = 24;
+      }
+    });
+    return true;
+  }
+
+  _hasMeaningfulPlan(plan) {
+    if (!plan || typeof plan !== "object") return false;
+    const hasLayers = Array.isArray(plan.layers) && plan.layers.length > 0;
+    const hasBg =
+      !!plan.background &&
+      (plan.background.type === "solid" ||
+        plan.background.type === "gradient" ||
+        plan.background.type === "image");
+    return hasLayers || hasBg;
+  }
+
+  async _aiUseTemplate(payload) {
+    const presets = await PresetsDB.getAll();
+    if (!presets.length) return false;
+    const byId = payload?.presetId
+      ? presets.find((p) => p.id === payload.presetId)
+      : null;
+    const byName = payload?.presetName
+      ? presets.find((p) =>
+          p.name
+            .toLowerCase()
+            .includes(String(payload.presetName).toLowerCase()),
+        )
+      : null;
+    const target = byId || byName;
+    if (!target?.state) return false;
+    this.canvas.snapshot();
+    this.canvas.setState(target.state);
+    this._fitCanvas();
+    this._updateFormatBadge(this.canvas.getState().formatId);
+    return true;
+  }
+
+  async _aiAddIcon(payload) {
+    const iconId = String(payload?.iconId ?? "").trim();
+    if (!iconId) return false;
+    const svg = await this.icons.fetchSVG(iconId);
+    if (!svg) return false;
+    this.canvas.snapshot();
+    this.canvas.addLayer(
+      makeIconLayer(null, payload?.name || iconId, iconId, svg),
+    );
+    const layer = this.canvas.getSelectedLayer();
+    if (!layer) return true;
+    this.canvas.updateLayer(layer.id, {
+      x: Number.isFinite(payload?.x) ? payload.x : layer.x,
+      y: Number.isFinite(payload?.y) ? payload.y : layer.y,
+      size: Number.isFinite(payload?.size) ? payload.size : layer.size,
+      color: payload?.color || layer.color,
+    });
+    return true;
+  }
+
+  _applyAssistantMessageFallback(message) {
+    const text = String(message ?? "").trim();
+    if (!text) return false;
+    const content = text.length > 280 ? `${text.slice(0, 277)}...` : text;
+    return this._aiAddText({
+      name: "Copy IA",
+      content,
+    });
+  }
+
+  _aiAddText(payload) {
+    const content = String(payload?.content ?? "").trim();
+    if (!content) return false;
+    const state = this.canvas.getState();
+    const target = state.layers.find((l) => l.type === "text");
+    if (target) {
+      this.canvas.snapshot();
+      this.canvas.updateLayer(target.id, {
+        content,
+      });
+      return true;
+    }
+    this.canvas.snapshot();
+    const layer = makeTextLayer(null, payload?.name || "Texto IA", content);
+    this.canvas.addLayer(layer);
+    const selected = this.canvas.getSelectedLayer();
+    if (!selected) return true;
+    this.canvas.updateLayer(selected.id, {
+      x: Number.isFinite(payload?.x) ? payload.x : selected.x,
+      y: Number.isFinite(payload?.y) ? payload.y : selected.y,
+      width: Number.isFinite(payload?.width) ? payload.width : selected.width,
+      fontSize: Number.isFinite(payload?.fontSize)
+        ? payload.fontSize
+        : selected.fontSize,
+      color: payload?.color || selected.color,
+      align: ["left", "center", "right"].includes(payload?.align)
+        ? payload.align
+        : selected.align,
+    });
+    return true;
+  }
+
+  _applyAIPostPlan(plan) {
+    const base = this._resolveAIBaseState();
+    const next = structuredClone(base);
+    const changed = this._applyPlanTextsToState(next, plan);
+    if (!changed) {
+      this._pushAIProgress(
+        "Plano sem textos aplicáveis. Mantendo preset/layout atual sem quebrar.",
+      );
+      return;
+    }
+    this.canvas.snapshot();
+    this.canvas.setState(next);
+    this._fitCanvas();
+    this._updateFormatBadge(next.formatId);
+    this._updateGradientBar();
+  }
+
+  async _generateShareCode() {
+    const scope = document.getElementById("share-scope")?.value ?? "project";
+    const permission =
+      document.getElementById("share-permission")?.value ?? "edit";
+    try {
+      let code = "";
+      if (scope === "project") {
+        if (!this._currentProjectId) {
+          toast("Abra um projeto para compartilhar.", "error");
+          return;
+        }
+        await this._saveProjectNow();
+        code = await shareCode.generateProjectCode(
+          this._currentProjectId,
+          permission,
+        );
+      } else {
+        const brandId = this.brands.getCurrentBrandId();
+        if (!brandId) {
+          toast("Selecione uma marca para compartilhar.", "error");
+          return;
+        }
+        code = await shareCode.generateBrandCode(brandId, permission);
+      }
+      document.getElementById("share-code-output").value = code;
+      toast("Código de compartilhamento gerado.", "success");
+    } catch (e) {
+      toast("Erro ao gerar código de compartilhamento.", "error");
+      console.error(e);
+    }
+  }
+
+  async _applyShareCode() {
+    const raw = document.getElementById("share-code-input")?.value?.trim();
+    if (!raw) {
+      toast("Cole um código para importar.", "error");
+      return;
+    }
+    try {
+      const envelope = shareCode.parseCode(raw);
+      if (envelope.scope === "project") {
+        const source = envelope.payload?.project;
+        if (!source) throw new Error("Projeto inválido no código.");
+        const importedId = crypto.randomUUID();
+        const imported = {
+          ...source,
+          id: importedId,
+          name: `${source.name || "Projeto"} (compartilhado)`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await ProjectsDB.save(imported);
+        await this._renderProjectsHome();
+        await this._openProject(importedId, {
+          forceReadOnly: envelope.permission === "view",
+        });
+      } else {
+        await this._importSharedBrand(envelope);
+      }
+      this._closeShareModal();
+      toast(
+        envelope.permission === "view"
+          ? "Material compartilhado aberto em modo visualização."
+          : "Material compartilhado importado com edição liberada.",
+        "success",
+      );
+    } catch (e) {
+      toast("Código de compartilhamento inválido.", "error");
+      console.error(e);
+    }
+  }
+
+  async _importSharedBrand(envelope) {
+    const data = envelope.payload ?? {};
+    const sourceBrand = data.brand;
+    if (!sourceBrand) throw new Error("Marca inválida no código.");
+    const newBrandId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await BrandsDB.save({
+      id: newBrandId,
+      name: `${sourceBrand.name || "Marca"} (compartilhada)`,
+      palette: sourceBrand.palette ?? [],
+      logo: sourceBrand.logo ?? null,
+      fontIds: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await Promise.all(
+      (data.fonts ?? []).map((item) =>
+        this.brands.addFontToBrand(newBrandId, {
+          ...item,
+          id: crypto.randomUUID(),
+          brandId: newBrandId,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      ),
+    );
+
+    await Promise.all(
+      (data.assets ?? []).map((item) =>
+        this.brands.addAsset(
+          {
+            ...item,
+            id: crypto.randomUUID(),
+            brandId: newBrandId,
+            createdAt: now,
+            updatedAt: now,
+          },
+          newBrandId,
+        ),
+      ),
+    );
+
+    for (const preset of data.presets ?? []) {
+      await PresetsDB.save({
+        ...preset,
+        id: crypto.randomUUID(),
+        brandId: newBrandId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    for (const entry of data.history ?? []) {
+      await PostHistoryDB.save({
+        ...entry,
+        id: crypto.randomUUID(),
+        brandId: newBrandId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    for (const doc of data.docs ?? []) {
+      await BrandDocsDB.save({
+        ...doc,
+        id: crypto.randomUUID(),
+        brandId: newBrandId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    let firstProjectId = null;
+    for (const project of data.projects ?? []) {
+      const id = crypto.randomUUID();
+      if (!firstProjectId) firstProjectId = id;
+      await ProjectsDB.save({
+        ...project,
+        id,
+        brandId: newBrandId,
+        name: `${project.name || "Projeto"} (compartilhado)`,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await this.brands.init();
+    await this.brands.setCurrentBrand(newBrandId);
+    await this._refreshSidebar();
+    await this._renderProjectsHome();
+    if (firstProjectId) {
+      await this._openProject(firstProjectId, {
+        forceReadOnly: envelope.permission === "view",
+      });
+    } else {
+      this._setReadOnlyMode(envelope.permission === "view");
+    }
+  }
+
+  _wireRealtimeCollab() {
+    if (this._realtime.bound) return;
+    this._realtime.bound = true;
+    document
+      .getElementById("btn-create-live-room")
+      ?.addEventListener("click", async () => {
+        await this._createLiveRoom();
+      });
+    document
+      .getElementById("btn-join-live-room")
+      ?.addEventListener("click", async () => {
+        await this._joinLiveRoom();
+      });
+    document
+      .getElementById("btn-leave-live-room")
+      ?.addEventListener("click", async () => {
+        this._leaveLiveRoom();
+      });
+    document
+      .getElementById("btn-copy-live-room")
+      ?.addEventListener("click", async () => {
+        const roomId = this._realtime.roomId;
+        if (!roomId) {
+          toast("Nenhuma sala ativa.", "info");
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(roomId);
+          toast("Código da sala copiado.", "success");
+        } catch {
+          toast("Não foi possível copiar código da sala.", "error");
+        }
+      });
+
+    bus.on("net:room-created", ({ roomId }) => {
+      this._realtime.active = true;
+      this._realtime.role = "host";
+      this._realtime.roomId = roomId;
+      this._setRealtimeStatus(`Ao vivo: host (${roomId})`);
+      this._setRealtimeRoomInput(roomId);
+      this._queueRealtimeBroadcast(true);
+    });
+
+    bus.on("net:room-joined", ({ roomId }) => {
+      this._realtime.active = true;
+      this._realtime.role = "guest";
+      this._realtime.roomId = roomId;
+      this._setRealtimeStatus(`Ao vivo: conectado (${roomId})`);
+      this._setRealtimeRoomInput(roomId);
+      network.broadcast("collab:request-sync", { roomId });
+    });
+
+    bus.on("net:peer-joined", () => {
+      if (this._realtime.role === "host") this._queueRealtimeBroadcast(true);
+    });
+
+    bus.on("net:action", async ({ type, payload, from }) => {
+      if (!this._realtime.active) return;
+      if (from === network.localId) return;
+      if (type === "collab:request-sync" && this._realtime.role === "host") {
+        this._queueRealtimeBroadcast(true);
+        return;
+      }
+      if (type !== "collab:project-sync") return;
+      await this._applyRemoteRealtimeProject(payload);
+    });
+
+    bus.on("net:disconnected", () => {
+      this._realtime.active = false;
+      this._realtime.role = null;
+      this._realtime.roomId = null;
+      this._setRealtimeStatus("Offline");
+    });
+
+    bus.on("net:error", ({ error }) => {
+      toast(`Erro de rede: ${error?.message ?? "falha"}`, "error");
+    });
+  }
+
+  async _createLiveRoom() {
+    if (!this._currentProjectId) {
+      toast("Abra um projeto para iniciar colaboração.", "error");
+      return;
+    }
+    try {
+      await this._saveProjectNow();
+      const roomInput = document.getElementById("live-room-id");
+      const roomId = roomInput?.value?.trim() || this._generateLiveRoomId();
+      await network.createRoom(roomId);
+    } catch (e) {
+      toast("Não foi possível criar sala ao vivo.", "error");
+      console.error(e);
+    }
+  }
+
+  async _joinLiveRoom() {
+    if (!this._currentProjectId) {
+      toast("Abra um projeto antes de entrar em sala.", "error");
+      return;
+    }
+    const roomId = document.getElementById("live-room-id")?.value?.trim();
+    if (!roomId) {
+      toast("Digite o código da sala.", "error");
+      return;
+    }
+    try {
+      await network.joinRoom(roomId);
+    } catch (e) {
+      toast("Não foi possível entrar na sala.", "error");
+      console.error(e);
+    }
+  }
+
+  _leaveLiveRoom() {
+    network.disconnect();
+    this._setRealtimeStatus("Offline");
+    toast("Sessão ao vivo encerrada.", "info");
+  }
+
+  _queueRealtimeBroadcast(immediate = false) {
+    if (!this._realtime.active) return;
+    if (!this._currentProjectId) return;
+    if (this._realtime.applyingRemote) return;
+    const send = async () => {
+      const payload = this._buildRealtimePayload();
+      network.broadcast("collab:project-sync", payload);
+    };
+    if (immediate) {
+      send();
+      return;
+    }
+    clearTimeout(this._realtime.syncTimer);
+    this._realtime.syncTimer = setTimeout(send, 220);
+  }
+
+  _buildRealtimePayload() {
+    return {
+      ts: Date.now(),
+      roomId: this._realtime.roomId,
+      project: {
+        name: this._getCurrentProjectName(),
+        mode: this._getCurrentProjectMode(),
+        brandId: this.brands.getCurrentBrandId(),
+        slides: this.slides.getSlides().map((s) => ({
+          id: s.id,
+          state: structuredClone(s.state),
+        })),
+        activeSlideIndex: this.slides.getActiveIndex(),
+      },
+    };
+  }
+
+  async _applyRemoteRealtimeProject(payload) {
+    const ts = Number(payload?.ts ?? 0);
+    if (!ts || ts <= this._realtime.lastRemoteTs) return;
+    const project = payload?.project;
+    if (!project?.slides?.length) return;
+    this._realtime.lastRemoteTs = ts;
+    this._realtime.applyingRemote = true;
+    this._loadingProject = true;
+    try {
+      if (project.brandId) await this.brands.setCurrentBrand(project.brandId);
+      await this.slides.loadSlides(
+        project.slides,
+        project.activeSlideIndex ?? 0,
+      );
+      this._fitCanvas();
+      this._updateFormatBadge(this.canvas.getState().formatId);
+      const current = this._currentProjectId
+        ? await ProjectsDB.get(this._currentProjectId)
+        : null;
+      if (current) {
+        await ProjectsDB.save({
+          ...current,
+          name: project.name ?? current.name,
+          mode: project.mode ?? current.mode,
+          brandId: project.brandId ?? current.brandId,
+          slides: project.slides.map((s) => ({
+            id: s.id,
+            state: structuredClone(s.state),
+          })),
+          activeSlideIndex: project.activeSlideIndex ?? 0,
+        });
+        this._updateProjectNameLabel(project.name ?? current.name);
+      }
+      this._projectDirty = false;
+      this._setRealtimeStatus(
+        `Sincronizado ${new Date(ts).toLocaleTimeString("pt-BR")}`,
+      );
+    } catch (e) {
+      console.error("Erro ao aplicar atualização remota:", e);
+    } finally {
+      this._loadingProject = false;
+      this._realtime.applyingRemote = false;
+    }
+  }
+
+  _setRealtimeStatus(text) {
+    const el = document.getElementById("live-room-status");
+    if (el) el.textContent = text;
+  }
+
+  _setRealtimeRoomInput(roomId) {
+    const el = document.getElementById("live-room-id");
+    if (el) el.value = roomId ?? "";
+  }
+
+  _generateLiveRoomId() {
+    const n = Math.floor(Math.random() * 900 + 100);
+    return `post-${n}-${Math.random().toString(36).slice(2, 6)}`;
+  }
+
+  _getCurrentProjectName() {
+    const el = document.getElementById("project-name-label");
+    if (!el) return "Projeto";
+    return el.textContent.replace(" • Somente leitura", "").trim() || "Projeto";
+  }
+
+  _getCurrentProjectMode() {
+    return this.slides.getSlides().length > 1 ? "slides" : "single";
+  }
+
   _wireProjectsHome() {
     document
       .getElementById("btn-new-project-single")
@@ -1539,8 +3468,10 @@ class App {
     await this._renderProjectsHome();
   }
 
-  async _openProject(projectId) {
+  async _openProject(projectId, opts = {}) {
     if (!projectId) return;
+    const canLeave = await this._confirmLeaveCurrentProject(projectId);
+    if (!canLeave) return;
     const project = await ProjectsDB.get(projectId);
     if (!project) return;
     this._loadingProject = true;
@@ -1554,6 +3485,8 @@ class App {
     this._updateFormatBadge(this.canvas.getState().formatId);
     this._updateProjectNameLabel(project.name);
     this._loadingProject = false;
+    this._projectDirty = false;
+    this._setReadOnlyMode(!!opts.forceReadOnly);
     this._showProjectsHome(false);
   }
 
@@ -1580,12 +3513,22 @@ class App {
         <div class="project-card-meta">
           <div class="project-card-top">
           <div class="project-card-name">${project.name}</div>
+          <button class="project-card-rename" data-rename-project="${project.id}" title="Renomear projeto">✎</button>
           <button class="project-card-delete" data-delete-project="${project.id}" title="Excluir projeto">×</button>
           </div>
           <div class="project-card-sub">${slidesCount} slide${slidesCount === 1 ? "" : "s"} • ${project.mode === "single" ? "Imagem única" : "Carrossel"}</div>
         </div>
       `;
-      card.addEventListener("click", () => this._openProject(project.id));
+      card.addEventListener("click", async () => {
+        await this._openProject(project.id);
+      });
+      card
+        .querySelector(`[data-rename-project]`)
+        ?.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await this._renameProject(project.id, project.name);
+        });
       card
         .querySelector(`[data-delete-project]`)
         ?.addEventListener("click", async (e) => {
@@ -1611,20 +3554,52 @@ class App {
     toast("Projeto excluído.", "success");
   }
 
+  async _renameProject(projectId, currentName = "") {
+    if (!projectId) return;
+    const nextName = prompt("Novo nome do projeto:", currentName)?.trim();
+    if (!nextName || nextName === currentName) return;
+    const project = await ProjectsDB.get(projectId);
+    if (!project) return;
+    await ProjectsDB.save({
+      ...project,
+      name: nextName,
+    });
+    if (this._currentProjectId === projectId) {
+      this._updateProjectNameLabel(nextName);
+    }
+    await this._renderProjectsHome();
+    toast("Projeto renomeado.", "success");
+  }
+
   _showProjectsHome(show) {
     const home = document.getElementById("projects-home");
     if (!home) return;
     home.classList.toggle("open", !!show);
   }
 
+  async _confirmLeaveCurrentProject(nextProjectId = null) {
+    if (!this._currentProjectId) return true;
+    if (nextProjectId && nextProjectId === this._currentProjectId) return true;
+    if (!this._projectDirty) return true;
+    const ok = confirm(
+      "Existe alteração não salva. Clique OK para salvar e continuar, ou Cancelar para permanecer no projeto atual.",
+    );
+    if (!ok) return false;
+    await this._saveProjectNow();
+    return true;
+  }
+
   _updateProjectNameLabel(name) {
     const el = document.getElementById("project-name-label");
     if (!el) return;
+    const suffix = this._shareReadOnly ? " • Somente leitura" : "";
     if (name) {
-      el.textContent = name;
+      el.textContent = `${name}${suffix}`;
       return;
     }
-    el.textContent = this._currentProjectId ? "Projeto" : "Sem projeto";
+    el.textContent = this._currentProjectId
+      ? `Projeto${suffix}`
+      : "Sem projeto";
   }
 
   /* ── Add Font modal ───────────────────────────────────── */
@@ -1655,6 +3630,7 @@ class App {
     document.addEventListener("keydown", (e) => {
       const tag = document.activeElement.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (this._shareReadOnly) return;
 
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -1713,11 +3689,195 @@ class App {
     const bar = document.getElementById("gradient-preview-bar");
     if (bar && bg.gradient) {
       const g = bg.gradient;
+      const reach = Math.max(0, Math.min(100, g.reach ?? 100));
+      const opacity = Math.max(0, Math.min(100, g.opacity ?? 100));
+      const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? 100));
+      const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? 100));
+      const from = this._withOpacity(g.from, (fromOpacity * opacity) / 100);
+      const to = this._withOpacity(g.to, (toOpacity * opacity) / 100);
       bar.style.background =
         g.type === "linear"
-          ? `linear-gradient(${g.angle}deg, ${g.from}, ${g.to})`
-          : `radial-gradient(ellipse at center, ${g.from}, ${g.to})`;
+          ? `linear-gradient(${g.angle}deg, ${from} 0%, ${to} ${reach}%)`
+          : `radial-gradient(ellipse at center, ${from} 0%, ${to} ${reach}%)`;
+      const angleRange = document.getElementById("prop-grad-angle");
+      const angleInput = document.getElementById("prop-grad-angle-input");
+      const angleVal = document.getElementById("prop-grad-angle-val");
+      const reachRange = document.getElementById("prop-grad-reach");
+      const reachVal = document.getElementById("prop-grad-reach-val");
+      const opacityRange = document.getElementById("prop-grad-opacity");
+      const opacityVal = document.getElementById("prop-grad-opacity-val");
+      const fromOpacityRange = document.getElementById(
+        "prop-grad-from-opacity",
+      );
+      const fromOpacityVal = document.getElementById(
+        "prop-grad-from-opacity-val",
+      );
+      const toOpacityRange = document.getElementById("prop-grad-to-opacity");
+      const toOpacityVal = document.getElementById("prop-grad-to-opacity-val");
+      if (angleRange) angleRange.value = String(g.angle ?? 135);
+      if (angleInput) angleInput.value = String(g.angle ?? 135);
+      if (angleVal) angleVal.textContent = `${g.angle ?? 135}°`;
+      if (reachRange) reachRange.value = String(reach);
+      if (reachVal) reachVal.textContent = `${reach}%`;
+      if (opacityRange) opacityRange.value = String(opacity);
+      if (opacityVal) opacityVal.textContent = `${opacity}%`;
+      if (fromOpacityRange) fromOpacityRange.value = String(fromOpacity);
+      if (fromOpacityVal) fromOpacityVal.textContent = `${fromOpacity}%`;
+      if (toOpacityRange) toOpacityRange.value = String(toOpacity);
+      if (toOpacityVal) toOpacityVal.textContent = `${toOpacity}%`;
     }
+  }
+
+  _withOpacity(color, opacityPercent = 100) {
+    const alpha = Math.max(0, Math.min(1, (opacityPercent ?? 100) / 100));
+    const c = String(color ?? "#000000").trim();
+    if (c.startsWith("#")) {
+      let hex = c.slice(1);
+      if (hex.length === 3 || hex.length === 4) {
+        hex = hex
+          .split("")
+          .map((ch) => ch + ch)
+          .join("");
+      }
+      if (hex.length === 8) hex = hex.slice(0, 6);
+      if (hex.length === 6) {
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+    }
+    const rgbaMatch = c.match(
+      /rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+))?\s*\)/i,
+    );
+    if (rgbaMatch) {
+      const r = Number(rgbaMatch[1]);
+      const g = Number(rgbaMatch[2]);
+      const b = Number(rgbaMatch[3]);
+      const baseA =
+        rgbaMatch[4] == null
+          ? 1
+          : Math.max(0, Math.min(1, Number(rgbaMatch[4])));
+      return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, baseA * alpha))})`;
+    }
+    return c;
+  }
+
+  async _savePresetByNameFlow() {
+    this._bindPresetSaveModal();
+    try {
+      const scopedPresets = await PresetsDB.getAll();
+      this._selectedPresetOverwriteId = null;
+      const input = document.getElementById("preset-save-name-input");
+      if (input) input.value = "";
+      this._renderPresetOverwriteList(scopedPresets);
+      document.getElementById("preset-save-modal")?.classList.add("open");
+    } catch (e) {
+      toast("Erro ao abrir modal de preset.", "error");
+      console.error(e);
+    }
+  }
+
+  async _overwritePresetByDoubleClickFlow() {
+    await this._savePresetByNameFlow();
+  }
+
+  _bindPresetSaveModal() {
+    if (this._presetSaveModalBound) return;
+    this._presetSaveModalBound = true;
+    document
+      .getElementById("btn-close-preset-save-modal")
+      ?.addEventListener("click", () => {
+        document.getElementById("preset-save-modal")?.classList.remove("open");
+      });
+    document
+      .getElementById("preset-save-modal")
+      ?.addEventListener("click", (e) => {
+        if (e.target?.id === "preset-save-modal") {
+          document
+            .getElementById("preset-save-modal")
+            ?.classList.remove("open");
+        }
+      });
+    document
+      .getElementById("btn-preset-save-new")
+      ?.addEventListener("click", async () => {
+        const name = document
+          .getElementById("preset-save-name-input")
+          ?.value?.trim();
+        if (!name) {
+          toast("Informe um nome para o novo preset.", "error");
+          return;
+        }
+        await this._persistPreset({ name });
+        document.getElementById("preset-save-modal")?.classList.remove("open");
+        toast("Preset salvo!", "success");
+        await this._refreshPresetsTab();
+      });
+    document
+      .getElementById("btn-preset-overwrite-selected")
+      ?.addEventListener("click", async () => {
+        if (!this._selectedPresetOverwriteId) {
+          toast("Selecione um preset existente para sobrescrever.", "info");
+          return;
+        }
+        const target = await PresetsDB.get(this._selectedPresetOverwriteId);
+        if (!target) {
+          toast("Preset selecionado não encontrado.", "error");
+          return;
+        }
+        await this._persistPreset({
+          id: target.id,
+          createdAt: target.createdAt,
+          name: target.name,
+        });
+        document.getElementById("preset-save-modal")?.classList.remove("open");
+        toast(`Preset "${target.name}" sobrescrito!`, "success");
+        await this._refreshPresetsTab();
+      });
+  }
+
+  _renderPresetOverwriteList(presets) {
+    const list = document.getElementById("preset-existing-list");
+    if (!list) return;
+    if (!presets.length) {
+      list.innerHTML =
+        '<div class="text-xs text-muted" style="padding:8px;">Nenhum preset disponível para sobrescrever.</div>';
+      return;
+    }
+    list.innerHTML = "";
+    presets.forEach((preset) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "btn btn-ghost btn-sm";
+      item.style.cssText =
+        "justify-content:flex-start;width:100%;border:1px solid var(--border);";
+      item.textContent = preset.name;
+      item.addEventListener("click", () => {
+        this._selectedPresetOverwriteId = preset.id;
+        list.querySelectorAll("button").forEach((btn) => {
+          btn.style.borderColor = "var(--border)";
+          btn.style.background = "transparent";
+        });
+        item.style.borderColor = "var(--accent)";
+        item.style.background = "var(--accent-bg)";
+      });
+      list.appendChild(item);
+    });
+  }
+
+  async _persistPreset({ id, createdAt, name }) {
+    const thumbnail = await this.exporter.generateThumbnail();
+    await PresetsDB.save({
+      id,
+      createdAt,
+      name,
+      formatId: this.canvas.getState().formatId,
+      state: this.canvas.getState(),
+      thumbnail,
+      brandId: null,
+      ownerBrandId: this.brands.getCurrentBrandId(),
+    });
   }
 
   _openFilePicker(accept, onFile) {
@@ -1758,29 +3918,85 @@ class App {
   }
 
   _queueProjectSave() {
-    if (this._loadingProject || !this._currentProjectId) return;
+    if (this._loadingProject || !this._currentProjectId || this._shareReadOnly)
+      return;
+    if (this._realtime.applyingRemote) return;
     clearTimeout(this._projectSaveTimer);
     this._projectSaveTimer = setTimeout(async () => {
       try {
-        const project = await ProjectsDB.get(this._currentProjectId);
-        if (!project) return;
-        const slides = this.slides.getSlides().map((s) => ({
-          id: s.id,
-          state: structuredClone(s.state),
-        }));
-        const coverThumbnail = await this.exporter.generateThumbnail(220);
-        await ProjectsDB.save({
-          ...project,
-          slides,
-          activeSlideIndex: this.slides.getActiveIndex(),
-          brandId: this.brands.getCurrentBrandId(),
-          coverThumbnail,
-        });
+        await this._saveProjectNow();
+        this._queueRealtimeBroadcast();
         await this._renderProjectsHome();
       } catch (e) {
         console.error("Erro ao salvar projeto:", e);
       }
     }, 800);
+  }
+
+  _markProjectDirty() {
+    if (this._loadingProject || !this._currentProjectId || this._shareReadOnly)
+      return;
+    if (this._realtime.applyingRemote) return;
+    this._projectDirty = true;
+  }
+
+  async _saveProjectNow() {
+    if (this._loadingProject || !this._currentProjectId || this._shareReadOnly)
+      return;
+    const project = await ProjectsDB.get(this._currentProjectId);
+    if (!project) return;
+    const slides = this.slides.getSlides().map((s) => ({
+      id: s.id,
+      state: structuredClone(s.state),
+    }));
+    const coverThumbnail = await this.exporter.generateThumbnail(220);
+    await ProjectsDB.save({
+      ...project,
+      slides,
+      activeSlideIndex: this.slides.getActiveIndex(),
+      brandId: this.brands.getCurrentBrandId(),
+      coverThumbnail,
+    });
+    this._projectDirty = false;
+  }
+
+  _setReadOnlyMode(readOnly) {
+    this._shareReadOnly = !!readOnly;
+    const controls = document.querySelectorAll(
+      [
+        "#btn-add-text",
+        "#btn-add-image",
+        "#btn-add-icon",
+        "#btn-add-shape",
+        "#btn-save-preset",
+        "#btn-slide-add",
+        "#btn-slide-duplicate",
+        "#btn-slide-remove",
+        "#btn-play-animation",
+        "#btn-duplicate-layer",
+        "#btn-delete-layer",
+        "#btn-layer-up",
+        "#btn-layer-down",
+        ".bg-type-btn",
+        "#properties-panel input",
+        "#properties-panel select",
+        "#properties-panel button",
+      ].join(","),
+    );
+    controls.forEach((el) => {
+      if (
+        el.id === "btn-export" ||
+        el.id === "btn-projects-home" ||
+        el.id === "btn-share"
+      )
+        return;
+      if ("disabled" in el) el.disabled = this._shareReadOnly;
+      else {
+        el.style.pointerEvents = this._shareReadOnly ? "none" : "";
+        el.style.opacity = this._shareReadOnly ? "0.6" : "";
+      }
+    });
+    this._updateProjectNameLabel();
   }
 }
 

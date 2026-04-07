@@ -12,6 +12,7 @@ import {
   PresetsDB,
   PostHistoryDB,
   ProjectsDB,
+  BrandDocsDB,
 } from "./db.js";
 
 export class BrandManager {
@@ -169,12 +170,13 @@ export class BrandManager {
   async exportBrandPackage(brandId) {
     const brand = await BrandsDB.get(brandId);
     if (!brand) throw new Error("Marca não encontrada.");
-    const [fonts, assets, presets, history, projects] = await Promise.all([
+    const [fonts, assets, presets, history, projects, docs] = await Promise.all([
       FontsDB.getByBrand(brandId),
       AssetsDB.getByBrand(brandId),
       PresetsDB.getByBrand(brandId),
       PostHistoryDB.getByBrand(brandId),
       ProjectsDB.getByBrand(brandId),
+      BrandDocsDB.getByBrand(brandId),
     ]);
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -184,6 +186,7 @@ export class BrandManager {
       presets,
       history,
       projects,
+      docs,
     };
     const fileName = `marca-${(brand.name ?? "sem-nome").toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}`;
     if (window.JSZip) {

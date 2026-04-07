@@ -190,6 +190,20 @@
           >
             Exportar Marca
           </button>
+          <button
+            id="btn-share"
+            class="btn btn-ghost btn-sm"
+            title="Compartilhar projeto ou marca"
+          >
+            Compartilhar
+          </button>
+          <button
+            id="btn-ai"
+            class="btn btn-ghost btn-sm"
+            title="Abrir chat lateral de IA"
+          >
+            Chat IA
+          </button>
 
           <button
             id="btn-export"
@@ -306,6 +320,44 @@
                   </div>
                 </div>
                 <div class="prop-row">
+                  <span class="prop-label">Opacidade De</span>
+                  <div class="prop-controls" style="gap: 6px">
+                    <input
+                      id="prop-grad-from-opacity"
+                      type="range"
+                      class="slider"
+                      min="0"
+                      max="100"
+                      value="100"
+                      style="flex: 1"
+                    />
+                    <span
+                      id="prop-grad-from-opacity-val"
+                      class="text-xs text-muted"
+                      >100%</span
+                    >
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Opacidade Para</span>
+                  <div class="prop-controls" style="gap: 6px">
+                    <input
+                      id="prop-grad-to-opacity"
+                      type="range"
+                      class="slider"
+                      min="0"
+                      max="100"
+                      value="100"
+                      style="flex: 1"
+                    />
+                    <span
+                      id="prop-grad-to-opacity-val"
+                      class="text-xs text-muted"
+                      >100%</span
+                    >
+                  </div>
+                </div>
+                <div class="prop-row">
                   <span class="prop-label">Tipo</span>
                   <div class="prop-controls">
                     <select
@@ -330,8 +382,52 @@
                       value="135"
                       style="flex: 1"
                     />
+                    <input
+                      id="prop-grad-angle-input"
+                      type="number"
+                      class="input input-sm"
+                      min="0"
+                      max="360"
+                      step="1"
+                      value="135"
+                      style="width: 72px"
+                    />
                     <span id="prop-grad-angle-val" class="text-xs text-muted"
                       >135°</span
+                    >
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Alcance</span>
+                  <div class="prop-controls" style="gap: 6px">
+                    <input
+                      id="prop-grad-reach"
+                      type="range"
+                      class="slider"
+                      min="1"
+                      max="100"
+                      value="100"
+                      style="flex: 1"
+                    />
+                    <span id="prop-grad-reach-val" class="text-xs text-muted"
+                      >100%</span
+                    >
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Opacidade</span>
+                  <div class="prop-controls" style="gap: 6px">
+                    <input
+                      id="prop-grad-opacity"
+                      type="range"
+                      class="slider"
+                      min="0"
+                      max="100"
+                      value="100"
+                      style="flex: 1"
+                    />
+                    <span id="prop-grad-opacity-val" class="text-xs text-muted"
+                      >100%</span
                     >
                   </div>
                 </div>
@@ -962,6 +1058,24 @@
                 </div>
               </div>
             </div>
+            <div class="prop-row">
+              <span class="prop-label">Zoom</span>
+              <div class="prop-controls" style="gap: 6px">
+                <input
+                  id="prop-img-zoom"
+                  type="range"
+                  class="slider"
+                  min="0.2"
+                  max="4"
+                  step="0.05"
+                  value="1"
+                  style="flex: 1"
+                />
+                <span id="prop-img-zoom-val" class="text-xs text-muted"
+                  >1x</span
+                >
+              </div>
+            </div>
           </div>
 
           <!-- POSITION section -->
@@ -1404,6 +1518,13 @@
               Exportar Todos os Formatos (.zip)
             </button>
             <button
+              id="btn-export-svg"
+              class="btn"
+              style="justify-content: center"
+            >
+              Exportar SVG
+            </button>
+            <button
               id="btn-export-gif"
               class="btn"
               style="justify-content: center"
@@ -1450,6 +1571,407 @@
             class="icon-results-grid"
             style="margin-top: 12px"
           ></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="share-modal" class="modal-backdrop">
+      <div class="modal" style="width: 760px; max-width: 96vw">
+        <div class="modal-header">
+          <span class="modal-title">Compartilhar Material</span>
+          <button id="btn-close-share-modal" class="modal-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 12px;
+              margin-bottom: 12px;
+            "
+          >
+            <div>
+              <label class="label">Escopo</label>
+              <select id="share-scope" class="input input-sm">
+                <option value="project">Projeto atual</option>
+                <option value="brand">Marca completa</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Permissão</label>
+              <select id="share-permission" class="input input-sm">
+                <option value="edit">Editar</option>
+                <option value="view">Somente visualização</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-bottom: 8px">
+            <button id="btn-generate-share-code" class="btn btn-primary">
+              Gerar Código
+            </button>
+            <button id="btn-copy-share-code" class="btn">Copiar Código</button>
+          </div>
+          <textarea
+            id="share-code-output"
+            class="input"
+            rows="5"
+            readonly
+            placeholder="O código gerado aparece aqui"
+          ></textarea>
+
+          <div class="section-divider"></div>
+
+          <label class="label">Aplicar código recebido</label>
+          <textarea
+            id="share-code-input"
+            class="input"
+            rows="5"
+            placeholder="Cole aqui o código de compartilhamento"
+          ></textarea>
+          <div style="margin-top: 8px; display: flex; gap: 8px">
+            <button id="btn-apply-share-code" class="btn">
+              Aplicar Código
+            </button>
+          </div>
+
+          <div class="section-divider"></div>
+
+          <label class="label">Colaboração em tempo real</label>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr auto auto;
+              gap: 8px;
+              align-items: end;
+            "
+          >
+            <input
+              id="live-room-id"
+              class="input"
+              placeholder="Código da sala (ex: post-123-abcd)"
+            />
+            <button id="btn-create-live-room" class="btn btn-primary">
+              Criar Sala
+            </button>
+            <button id="btn-join-live-room" class="btn">Entrar</button>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 8px">
+            <button id="btn-copy-live-room" class="btn">Copiar Código</button>
+            <button id="btn-leave-live-room" class="btn btn-ghost">
+              Sair da Sala
+            </button>
+            <span
+              id="live-room-status"
+              class="text-xs text-muted"
+              style="display: inline-flex; align-items: center"
+              >Offline</span
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="preset-save-modal" class="modal-backdrop">
+      <div class="modal" style="width: 620px; max-width: 95vw">
+        <div class="modal-header">
+          <span class="modal-title">Salvar Preset</span>
+          <button id="btn-close-preset-save-modal" class="modal-close">
+            ×
+          </button>
+        </div>
+        <div class="modal-body">
+          <label class="label">Criar novo preset</label>
+          <div style="display: flex; gap: 8px">
+            <input
+              id="preset-save-name-input"
+              class="input"
+              placeholder="Nome do novo preset"
+              style="flex: 1"
+            />
+            <button id="btn-preset-save-new" class="btn btn-primary">
+              Salvar Novo
+            </button>
+          </div>
+
+          <div class="section-divider"></div>
+
+          <label class="label">Sobrescrever existente</label>
+          <div
+            id="preset-existing-list"
+            style="
+              display: grid;
+              gap: 6px;
+              max-height: 220px;
+              overflow: auto;
+              margin-bottom: 8px;
+            "
+          ></div>
+          <div style="display: flex; gap: 8px">
+            <button id="btn-preset-overwrite-selected" class="btn">
+              Sobrescrever Selecionado
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ai-modal" class="modal-backdrop">
+      <div class="modal" style="width: 860px; max-width: 96vw">
+        <div class="modal-header">
+          <span class="modal-title">IA para Criar Posts</span>
+          <button id="btn-close-ai-modal" class="modal-close">×</button>
+        </div>
+        <div class="modal-body">
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 10px;
+              margin-bottom: 10px;
+            "
+          >
+            <div>
+              <label class="label">Provider</label>
+              <select id="ai-provider" class="input input-sm">
+                <option value="minimax">MiniMax</option>
+                <option value="minimax_token_plan">
+                  MiniMax Token Plan (Anthropic)
+                </option>
+                <option value="openai">OpenAI</option>
+                <option value="compatible">Compatível (OpenAI-like)</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">Modelo</label>
+              <input
+                id="ai-model"
+                class="input"
+                placeholder="minimax-2.7 / MiniMax-M1 / gpt-4o-mini"
+              />
+            </div>
+            <div>
+              <label class="label">Endpoint</label>
+              <input
+                id="ai-endpoint"
+                class="input"
+                placeholder="Opcional (auto do provider)"
+              />
+            </div>
+            <div>
+              <label class="label">Temperatura</label>
+              <input
+                id="ai-temperature"
+                type="number"
+                min="0"
+                max="2"
+                step="0.1"
+                value="0.8"
+                class="input"
+              />
+            </div>
+          </div>
+
+          <label class="label">API Key (salva localmente no IndexedDB)</label>
+          <div style="display: flex; gap: 8px; margin-bottom: 10px">
+            <input
+              id="ai-api-key"
+              type="password"
+              class="input"
+              placeholder="Cole sua API key"
+              style="flex: 1"
+            />
+            <button id="btn-ai-save-config" class="btn">Salvar Config</button>
+          </div>
+
+          <div class="section-divider"></div>
+
+          <label class="label"
+            >Insumos da marca (arquivos de briefing/material)</label
+          >
+          <div style="display: flex; gap: 8px; margin-bottom: 8px">
+            <button id="btn-ai-add-docs" class="btn">Anexar Arquivos</button>
+          </div>
+          <div
+            id="ai-docs-list"
+            style="display: grid; gap: 6px; max-height: 140px; overflow: auto"
+          ></div>
+
+          <div class="section-divider"></div>
+
+          <label class="label">Chat com IA (iterativo)</label>
+          <div style="margin-bottom: 8px">
+            <label class="label">Preset base da IA</label>
+            <select id="ai-base-preset" class="input input-sm">
+              <option value="">Atual (sem preset fixo)</option>
+            </select>
+          </div>
+          <div
+            id="ai-chat-log"
+            style="
+              border: 1px solid var(--border);
+              border-radius: 8px;
+              padding: 8px;
+              max-height: 220px;
+              overflow: auto;
+              display: grid;
+              gap: 6px;
+              margin-bottom: 8px;
+            "
+          ></div>
+          <textarea
+            id="ai-prompt"
+            class="input"
+            rows="4"
+            placeholder="Ex: Crie um post para lançamento premium. Depois adicione 2 páginas e ícones de estrela e foguete."
+          ></textarea>
+          <div style="display: flex; gap: 8px; margin-top: 10px">
+            <button id="btn-ai-generate-post" class="btn btn-primary">
+              Enviar no Chat
+            </button>
+            <button id="btn-ai-plan" class="btn">Planejar</button>
+            <button id="btn-ai-apply-partial" class="btn">
+              Aplicar Parcial
+            </button>
+            <button id="btn-ai-apply-all" class="btn">Aplicar Tudo</button>
+            <button id="btn-ai-undo-last" class="btn">Desfazer IA</button>
+            <button id="btn-ai-clear-chat" class="btn">Limpar Chat</button>
+          </div>
+          <div
+            id="ai-action-status"
+            class="text-xs text-muted"
+            style="margin-top: 8px"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <aside
+      id="ai-side-panel"
+      style="
+        position: fixed;
+        right: 0;
+        top: 52px;
+        bottom: 0;
+        width: 360px;
+        max-width: 92vw;
+        border-left: 1px solid var(--border);
+        background: var(--panel-bg);
+        z-index: 650;
+        transform: translateX(100%);
+        transition: transform var(--t-base);
+        display: flex;
+        flex-direction: column;
+      "
+    >
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 10px;
+          border-bottom: 1px solid var(--border);
+        "
+      >
+        <strong style="font-size: 12px">Chat IA</strong>
+        <div style="display: flex; gap: 6px">
+          <button id="btn-ai-open-config" class="btn btn-ghost btn-sm">
+            Config
+          </button>
+          <button id="btn-ai-side-close" class="btn btn-ghost btn-sm">
+            Fechar
+          </button>
+        </div>
+      </div>
+      <div
+        id="ai-side-chat-log"
+        style="flex: 1; overflow: auto; display: grid; gap: 6px; padding: 10px"
+      ></div>
+      <div style="padding: 10px; border-top: 1px solid var(--border)">
+        <div
+          style="
+            display: grid;
+            grid-template-columns: 100px 1fr;
+            gap: 6px;
+            margin-bottom: 8px;
+          "
+        >
+          <input
+            id="ai-side-post-count"
+            type="number"
+            class="input input-sm"
+            min="1"
+            max="12"
+            value="1"
+            placeholder="Qtd"
+          />
+          <select id="ai-side-format" class="input input-sm"></select>
+          <select id="ai-side-network" class="input input-sm">
+            <option value="">Rede (auto)</option>
+            <option value="instagram">Instagram</option>
+            <option value="facebook">Facebook</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="tiktok">TikTok</option>
+            <option value="youtube">YouTube</option>
+            <option value="x">X/Twitter</option>
+            <option value="threads">Threads</option>
+          </select>
+          <input
+            id="ai-side-goal"
+            class="input input-sm"
+            placeholder="Objetivo/CTA (opcional)"
+          />
+        </div>
+        <div style="margin-bottom: 8px">
+          <label class="label">Preset base</label>
+          <select id="ai-side-base-preset" class="input input-sm">
+            <option value="">Atual (sem preset fixo)</option>
+          </select>
+        </div>
+        <textarea
+          id="ai-side-prompt"
+          class="input"
+          rows="4"
+          placeholder="Peça para criar/editar slides... Dica: /preset NomeDoPreset para definir base"
+        ></textarea>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px">
+          <button id="btn-ai-side-send" class="btn btn-primary">Enviar</button>
+          <button id="btn-ai-side-plan" class="btn">Planejar</button>
+          <button id="btn-ai-side-partial" class="btn">Parcial</button>
+          <button id="btn-ai-side-all" class="btn">Tudo</button>
+          <button id="btn-ai-side-undo" class="btn">Desfazer</button>
+          <button id="btn-ai-side-clear" class="btn">Limpar</button>
+        </div>
+        <div
+          id="ai-side-action-status"
+          class="text-xs text-muted"
+          style="margin-top: 6px"
+        ></div>
+      </div>
+    </aside>
+
+    <div id="ai-doc-modal" class="modal-backdrop">
+      <div class="modal" style="width: 860px; max-width: 96vw">
+        <div class="modal-header">
+          <span id="ai-doc-modal-title" class="modal-title">Documento</span>
+          <button id="btn-close-ai-doc-modal" class="modal-close">×</button>
+        </div>
+        <div class="modal-body">
+          <textarea
+            id="ai-doc-modal-content"
+            class="input"
+            rows="16"
+            style="
+              font-family:
+                ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            "
+          ></textarea>
+          <div style="display: flex; gap: 8px; margin-top: 10px">
+            <button id="btn-save-ai-doc-modal" class="btn btn-primary">
+              Salvar
+            </button>
+          </div>
         </div>
       </div>
     </div>
