@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PostGenerate — Criador de Posts para Redes Sociais</title>
+
+  <!-- Design System -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+
+  <!-- CDN libs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- JSZip optional — needed for multi-format export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <!-- Canvas layer selection style -->
+  <style>
+    .pg-layer--selected {
+      outline: 2px solid #7BC4EC;
+      outline-offset: 1px;
+    }
+    .pg-layer:hover:not(.pg-layer--selected) {
+      outline: 1px dashed rgba(123,196,236,0.4);
+      outline-offset: 1px;
+    }
+    #canvas-preview-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow: auto;
+      position: relative;
+    }
+    /* Animated bg for empty canvas area */
+    #canvas-area {
+      background:
+        radial-gradient(ellipse 60% 40% at 30% 60%, rgba(123,196,236,0.04) 0%, transparent 60%),
+        var(--canvas-area-bg);
+    }
+  </style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ╔══ HEADER ══════════════════════════════════════════════╗ -->
+  <header id="header">
+    <!-- Logo -->
+    <div class="header-brand">
+      <div class="header-logo">P</div>
+      <span class="header-app-name">PostGenerate</span>
+    </div>
+
+    <div class="header-sep"></div>
+
+    <!-- Brand selector -->
+    <div class="dropdown">
+      <button id="btn-brand" class="brand-selector">
+        <div class="brand-selector-dot"></div>
+        <span id="brand-name-label">Sem marca</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="opacity:.5">
+          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div id="brand-dropdown-menu" class="dropdown-menu"></div>
+    </div>
+
+    <div class="header-sep"></div>
+
+    <!-- Format selector -->
+    <button id="btn-format" class="format-selector-btn" title="Selecionar formato">
+      📷 Instagram — Feed Quadrado <span class="format-dims">1080×1080</span>
+    </button>
+
+    <!-- Header center spacer -->
+    <div style="flex:1"></div>
+
+    <!-- Undo / Redo -->
+    <div class="header-right">
+      <button id="btn-undo" class="btn btn-ghost btn-icon" title="Desfazer (Ctrl+Z)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+        </svg>
+      </button>
+      <button id="btn-redo" class="btn btn-ghost btn-icon" title="Refazer (Ctrl+Y)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/>
+        </svg>
+      </button>
+
+      <div class="header-sep"></div>
+
+      <button id="btn-save-preset" class="btn btn-ghost btn-sm" title="Salvar preset">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+        </svg>
+        Salvar
+      </button>
+
+      <button id="btn-export" class="btn btn-primary" title="Exportar imagem">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Exportar
+      </button>
+    </div>
+  </header>
+
+  <!-- ╔══ SIDEBAR ══════════════════════════════════════════════╗ -->
+  <aside id="sidebar">
+    <!-- Tabs -->
+    <div class="sidebar-tabs">
+      <button class="sidebar-tab active" data-tab="colors">Cores</button>
+      <button class="sidebar-tab" data-tab="fonts">Fontes</button>
+      <button class="sidebar-tab" data-tab="logos">Logos</button>
+      <button class="sidebar-tab" data-tab="presets">Presets</button>
+    </div>
+
+    <div class="sidebar-content">
+
+      <!-- CORES tab -->
+      <div id="tab-colors" class="tab-panel active">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">
+            <span class="sidebar-section-title">Paleta da Marca</span>
+            <button id="btn-add-global-color" class="btn btn-ghost btn-sm btn-icon" title="Adicionar cor">+</button>
+          </div>
+          <div id="sidebar-colors" class="palette-grid">
+            <!-- Rendered by brand manager -->
+          </div>
+        </div>
+
+        <!-- Background controls -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">
+            <span class="sidebar-section-title">Fundo do Post</span>
+          </div>
+
+          <!-- Type selector -->
+          <div class="bg-type-group">
+            <button class="bg-type-btn active" data-bg-type="solid">Sólido</button>
+            <button class="bg-type-btn" data-bg-type="gradient">Gradiente</button>
+            <button class="bg-type-btn" data-bg-type="image">Imagem</button>
+          </div>
+
+          <!-- Solid panel -->
+          <div id="bg-panel-solid" class="bg-panel">
+            <div class="prop-row">
+              <span class="prop-label">Cor</span>
+              <div class="prop-controls">
+                <button id="prop-bg-color-swatch" class="color-swatch-btn">
+                  <div class="swatch-fill" style="background:#000000;"></div>
+                </button>
+                <span class="text-muted text-xs">#000000</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gradient panel -->
+          <div id="bg-panel-gradient" class="bg-panel hidden">
+            <div id="gradient-preview-bar" class="gradient-bar" style="background:linear-gradient(135deg,#000000,#0e1a2e)"></div>
+            <div class="prop-row">
+              <span class="prop-label">De</span>
+              <div class="prop-controls">
+                <button id="prop-grad-from-swatch" class="color-swatch-btn">
+                  <div class="swatch-fill" style="background:#000000;"></div>
+                </button>
+              </div>
+            </div>
+            <div class="prop-row">
+              <span class="prop-label">Para</span>
+              <div class="prop-controls">
+                <button id="prop-grad-to-swatch" class="color-swatch-btn">
+                  <div class="swatch-fill" style="background:#0e1a2e;"></div>
+                </button>
+              </div>
+            </div>
+            <div class="prop-row">
+              <span class="prop-label">Tipo</span>
+              <div class="prop-controls">
+                <select id="prop-grad-type" class="input input-sm" style="flex:1">
+                  <option value="linear">Linear</option>
+                  <option value="radial">Radial</option>
+                </select>
+              </div>
+            </div>
+            <div class="prop-row">
+              <span class="prop-label">Ângulo</span>
+              <div class="prop-controls" style="gap:6px;">
+                <input id="prop-grad-angle" type="range" class="slider" min="0" max="360" value="135" style="flex:1">
+                <span id="prop-grad-angle-val" class="text-xs text-muted">135°</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Image panel -->
+          <div id="bg-panel-image" class="bg-panel hidden">
+            <button id="btn-bg-image" class="btn full-width" style="margin-bottom:8px;">
+              Escolher imagem...
+            </button>
+            <div class="prop-row">
+              <span class="prop-label">Tamanho</span>
+              <div class="prop-controls">
+                <select id="prop-bg-image-size" class="input input-sm" style="flex:1">
+                  <option value="cover">Cover</option>
+                  <option value="contain">Contain</option>
+                  <option value="fill">Fill</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FONTES tab -->
+      <div id="tab-fonts" class="tab-panel">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">
+            <span class="sidebar-section-title">Fontes da Marca</span>
+            <button id="btn-add-font" class="btn btn-ghost btn-sm btn-icon" title="Adicionar fonte">+</button>
+          </div>
+          <div id="sidebar-fonts">
+            <!-- Rendered by brand manager -->
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-section-title" style="margin-bottom:8px;">Fontes do Google</div>
+          <div style="display:flex;flex-direction:column;gap:3px;" id="google-fonts-list">
+            <!-- Rendered on init -->
+          </div>
+        </div>
+      </div>
+
+      <!-- LOGOS tab -->
+      <div id="tab-logos" class="tab-panel">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">
+            <span class="sidebar-section-title">Logos</span>
+          </div>
+          <div id="sidebar-logos" class="asset-grid">
+            <!-- Rendered by brand manager -->
+          </div>
+        </div>
+      </div>
+
+      <!-- PRESETS tab -->
+      <div id="tab-presets" class="tab-panel">
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">
+            <span class="sidebar-section-title">Presets Salvos</span>
+          </div>
+          <div id="sidebar-presets">
+            <!-- Rendered by app -->
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /sidebar-content -->
+  </aside>
+
+  <!-- ╔══ CANVAS AREA ═════════════════════════════════════════╗ -->
+  <main id="canvas-area">
+    <!-- Canvas toolbar -->
+    <div class="canvas-toolbar">
+      <div class="canvas-toolbar-left">
+        <button id="btn-add-text" class="btn btn-ghost btn-sm" title="Adicionar texto">
+          T+ Texto
+        </button>
+        <button id="btn-add-badge" class="btn btn-ghost btn-sm" title="Adicionar badge">
+          ◉ Badge
+        </button>
+        <button id="btn-add-image" class="btn btn-ghost btn-sm" title="Adicionar imagem">
+          🖼 Imagem
+        </button>
+        <button id="btn-add-shape" class="btn btn-ghost btn-sm" title="Adicionar forma">
+          ▭ Forma
+        </button>
+      </div>
+      <div class="canvas-toolbar-right">
+        <span id="zoom-badge" class="zoom-badge">50%</span>
+      </div>
+    </div>
+
+    <!-- Preview -->
+    <div id="canvas-preview-area">
+      <div class="canvas-preview-wrapper">
+        <div id="post-canvas">
+          <!-- Rendered by CanvasEngine -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Layers panel -->
+    <div id="layers-panel">
+      <div class="layers-header">
+        <span class="layers-title">Camadas</span>
+        <div style="display:flex;gap:4px;">
+          <button id="btn-layer-up" class="btn btn-ghost btn-sm btn-icon" title="Mover para cima">↑</button>
+          <button id="btn-layer-down" class="btn btn-ghost btn-sm btn-icon" title="Mover para baixo">↓</button>
+        </div>
+      </div>
+      <div id="layers-list" class="layers-list">
+        <!-- Rendered by app -->
+      </div>
+    </div>
+  </main>
+
+  <!-- ╔══ PROPERTIES PANEL ════════════════════════════════════╗ -->
+  <aside id="properties-panel">
+    <div class="properties-header" style="display:flex;align-items:center;justify-content:space-between;">
+      <span id="props-layer-name" class="properties-title">Propriedades</span>
+      <div style="display:flex;gap:4px;">
+        <button id="btn-duplicate-layer" class="btn btn-ghost btn-sm btn-icon" title="Duplicar (Ctrl+D)">⧉</button>
+        <button id="btn-delete-layer" class="btn btn-ghost btn-sm btn-icon btn-danger" title="Deletar (Del)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="properties-scroll">
+
+      <!-- Empty state -->
+      <div id="props-empty" class="empty-state">
+        <div class="empty-state-icon">☝</div>
+        <div class="empty-state-text">Clique em uma camada<br>para editar</div>
+      </div>
+
+      <!-- TEXT section -->
+      <div id="props-text" class="prop-section hidden">
+        <div class="prop-section-title">Texto</div>
+
+        <div style="margin-bottom:8px;">
+          <label class="label">Conteúdo</label>
+          <textarea id="prop-content" class="input" rows="4" placeholder="Digite o texto..."></textarea>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Fonte</span>
+          <div class="prop-controls">
+            <select id="prop-font-family" class="input input-sm" style="flex:1">
+              <option value="Inter">Inter</option>
+              <option value="Roboto">Roboto</option>
+              <option value="Montserrat">Montserrat</option>
+              <option value="Poppins">Poppins</option>
+              <option value="Raleway">Raleway</option>
+              <option value="Playfair Display">Playfair Display</option>
+              <option value="Oswald">Oswald</option>
+              <option value="Lato">Lato</option>
+              <option value="Nunito">Nunito</option>
+              <option value="Open Sans">Open Sans</option>
+              <option value="DM Sans">DM Sans</option>
+              <option value="Josefin Sans">Josefin Sans</option>
+              <option value="Ubuntu">Ubuntu</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Tamanho</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-font-size" type="number" min="0.1" max="50" step="0.1" value="9">
+              <span class="num-input-unit">%W</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Peso</span>
+          <div class="prop-controls">
+            <select id="prop-font-weight" class="input input-sm" style="flex:1">
+              <option value="100">Thin 100</option>
+              <option value="200">ExtraLight 200</option>
+              <option value="300">Light 300</option>
+              <option value="400">Regular 400</option>
+              <option value="500">Medium 500</option>
+              <option value="600">SemiBold 600</option>
+              <option value="700">Bold 700</option>
+              <option value="800" selected>ExtraBold 800</option>
+              <option value="900">Black 900</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Cor</span>
+          <div class="prop-controls">
+            <button id="prop-color-swatch" class="color-swatch-btn" title="Escolher cor">
+              <div class="swatch-fill" style="background:#ffffff;"></div>
+            </button>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Alinhamento</span>
+          <div class="prop-controls">
+            <div class="align-group" data-align-group="prop-align">
+              <button class="align-btn active" data-align="left" title="Esquerda">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+              </button>
+              <button class="align-btn" data-align="center" title="Centro">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+              </button>
+              <button class="align-btn" data-align="right" title="Direita">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Altura Linha</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-line-height" type="number" min="0.5" max="3" step="0.05" value="1.05">
+            </div>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Espaç. Letra</span>
+          <div class="prop-controls">
+            <input id="prop-letter-spacing" type="text" class="input input-sm" value="-0.03em" style="flex:1" placeholder="ex: -0.03em">
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Transformar</span>
+          <div class="prop-controls">
+            <select id="prop-text-transform" class="input input-sm" style="flex:1">
+              <option value="none">Normal</option>
+              <option value="uppercase">MAIÚSCULAS</option>
+              <option value="lowercase">minúsculas</option>
+              <option value="capitalize">Capitalizar</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Opacidade</span>
+          <div class="prop-controls" style="gap:8px;">
+            <input id="prop-opacity" type="range" class="slider" min="0" max="100" value="100" style="flex:1">
+            <span class="text-xs text-muted" style="min-width:30px;text-align:right;" id="prop-opacity-val">100%</span>
+          </div>
+        </div>
+
+        <script>
+          document.getElementById('prop-opacity')?.addEventListener('input', (e) => {
+            document.getElementById('prop-opacity-val').textContent = e.target.value + '%'
+          })
+        </script>
+      </div>
+
+      <!-- BADGE section (appears for badge subtype) -->
+      <div id="props-badge" class="prop-section hidden">
+        <div class="prop-section-title">Badge</div>
+
+        <div class="prop-row">
+          <span class="prop-label">Fundo</span>
+          <div class="prop-controls">
+            <button id="prop-badge-bg-swatch" class="color-swatch-btn">
+              <div class="swatch-fill" style="background:transparent;"></div>
+            </button>
+            <span class="text-xs text-muted">bg</span>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Borda</span>
+          <div class="prop-controls">
+            <button id="prop-badge-border-swatch" class="color-swatch-btn">
+              <div class="swatch-fill" style="background:rgba(123,196,236,0.4);"></div>
+            </button>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Raio</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-badge-border-radius" type="number" min="0" max="200" value="100">
+              <span class="num-input-unit">px</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Pad X</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-badge-padding-x" type="number" min="0" max="10" step="0.1" value="1.1">
+              <span class="num-input-unit">%W</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Pad Y</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-badge-padding-y" type="number" min="0" max="5" step="0.05" value="0.33">
+              <span class="num-input-unit">%W</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- POSITION section -->
+      <div id="props-position" class="prop-section hidden">
+        <div class="prop-section-title">Posição e Tamanho</div>
+
+        <div class="prop-row">
+          <span class="prop-label">X</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-x" type="number" min="-50" max="150" step="0.5" value="8.5">
+              <span class="num-input-unit">%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Y</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-y" type="number" min="-50" max="150" step="0.5" value="18">
+              <span class="num-input-unit">%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Largura</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-width" type="text" value="75" placeholder="auto">
+              <span class="num-input-unit">%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- IMAGE section -->
+      <div id="props-image" class="prop-section hidden">
+        <div class="prop-section-title">Imagem</div>
+
+        <div class="prop-row">
+          <span class="prop-label">Altura</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-img-height" type="number" min="1" max="100" step="0.5" value="40">
+              <span class="num-input-unit">%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Ajuste</span>
+          <div class="prop-controls">
+            <select id="prop-img-fit" class="input input-sm" style="flex:1">
+              <option value="contain">Contain</option>
+              <option value="cover">Cover</option>
+              <option value="fill">Fill</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Raio</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-img-radius" type="number" min="0" max="50" step="0.5" value="0">
+              <span class="num-input-unit">%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SHAPE section -->
+      <div id="props-shape" class="prop-section hidden">
+        <div class="prop-section-title">Forma</div>
+
+        <div class="prop-row">
+          <span class="prop-label">Cor</span>
+          <div class="prop-controls">
+            <button id="prop-shape-fill-swatch" class="color-swatch-btn">
+              <div class="swatch-fill" style="background:#7BC4EC;"></div>
+            </button>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Altura</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-shape-height" type="number" min="0.1" max="100" step="0.1" value="0.5">
+              <span class="num-input-unit">%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="prop-row">
+          <span class="prop-label">Raio</span>
+          <div class="prop-controls">
+            <div class="num-input" style="flex:1">
+              <input id="prop-shape-radius" type="number" min="0" max="500" value="100">
+              <span class="num-input-unit">px</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /properties-scroll -->
+  </aside>
+
+</div><!-- /#app -->
+
+<!-- ╔══ FORMAT MODAL ══════════════════════════════════════════╗ -->
+<div id="format-modal" class="modal-backdrop">
+  <div class="modal" style="width:600px;max-width:95vw;">
+    <div class="modal-header">
+      <span class="modal-title">Selecionar Formato</span>
+      <button id="btn-close-format-modal" class="modal-close">×</button>
+    </div>
+    <div class="modal-body" id="format-modal-content" style="overflow-y:auto;max-height:70vh;">
+      <!-- Rendered by app -->
+    </div>
+  </div>
+</div>
+
+<!-- ╔══ EXPORT MODAL ══════════════════════════════════════════╗ -->
+<div id="export-modal" class="modal-backdrop">
+  <div class="modal" style="width:400px;">
+    <div class="modal-header">
+      <span class="modal-title">Exportar Imagem</span>
+      <button id="btn-close-export-modal" class="modal-close">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">
+        A imagem será exportada na resolução original do formato selecionado.
+      </p>
+
+      <div style="margin-bottom:16px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+          <input id="export-transparent" type="checkbox">
+          <span>Exportar sem fundo (PNG transparente)</span>
+        </label>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button id="btn-export-png" class="btn btn-primary" style="justify-content:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Exportar PNG — Formato atual
+        </button>
+
+        <button id="btn-export-all-formats" class="btn" style="justify-content:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Exportar Todos os Formatos (.zip)
+        </button>
+      </div>
+
+      <p style="font-size:11px;color:var(--text-disabled);margin-top:12px;">
+        Dica: O export usa html2canvas. Fontes externas (Google Fonts) devem carregar antes de exportar.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══ Toast container ═══════════════════════════════════════╗ -->
+<div id="toast-container"></div>
+
+<!-- ╔══ App bootstrap ══════════════════════════════════════════╗ -->
+<script type="module" src="js/app.js"></script>
+
+</body>
+</html>
