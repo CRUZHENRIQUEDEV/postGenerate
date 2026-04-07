@@ -99,6 +99,7 @@ class App {
       syncTimer: null,
       bound: false,
     };
+    this._canvasPreviewZoom = 1;
   }
 
   /* ── Boot ─────────────────────────────────────────────── */
@@ -191,6 +192,7 @@ class App {
     const availW = area.clientWidth - pad;
     const availH = area.clientHeight - pad;
     this.canvas.setPreviewSize(availW, availH);
+    this.canvas.setPreviewZoom(this._canvasPreviewZoom);
 
     const { scale } = this.canvas;
     const { w, h } = this.canvas.getPreviewDims();
@@ -915,6 +917,38 @@ class App {
       const zoomVal = document.getElementById("prop-img-zoom-val");
       if (zoomVal) zoomVal.textContent = `${imageZoom.toFixed(2)}x`;
       this.canvas.updateLayer(layer.id, { imageZoom });
+    });
+    panel.querySelector("#btn-img-zoom-out")?.addEventListener("click", () => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer || layer.type !== "image") {
+        toast("Selecione uma imagem para ajustar o zoom.", "info");
+        return;
+      }
+      const next = Math.max(
+        0.2,
+        Math.min(4, Number(layer.imageZoom ?? 1) - 0.1),
+      );
+      const input = document.getElementById("prop-img-zoom");
+      if (input) input.value = next.toFixed(2);
+      const zoomVal = document.getElementById("prop-img-zoom-val");
+      if (zoomVal) zoomVal.textContent = `${next.toFixed(2)}x`;
+      this.canvas.updateLayer(layer.id, { imageZoom: next });
+    });
+    panel.querySelector("#btn-img-zoom-in")?.addEventListener("click", () => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer || layer.type !== "image") {
+        toast("Selecione uma imagem para ajustar o zoom.", "info");
+        return;
+      }
+      const next = Math.max(
+        0.2,
+        Math.min(4, Number(layer.imageZoom ?? 1) + 0.1),
+      );
+      const input = document.getElementById("prop-img-zoom");
+      if (input) input.value = next.toFixed(2);
+      const zoomVal = document.getElementById("prop-img-zoom-val");
+      if (zoomVal) zoomVal.textContent = `${next.toFixed(2)}x`;
+      this.canvas.updateLayer(layer.id, { imageZoom: next });
     });
 
     panel
@@ -2006,6 +2040,20 @@ class App {
       ?.addEventListener("click", async () => {
         await this._applyCurrentBgToAllSlides();
       });
+    document
+      .getElementById("btn-canvas-img-zoom-out")
+      ?.addEventListener("click", () => this._adjustCanvasPreviewZoom(-0.1));
+    document
+      .getElementById("btn-canvas-img-zoom-in")
+      ?.addEventListener("click", () => this._adjustCanvasPreviewZoom(0.1));
+  }
+
+  _adjustCanvasPreviewZoom(delta) {
+    this._canvasPreviewZoom = Math.max(
+      0.25,
+      Math.min(3, Number(this._canvasPreviewZoom || 1) + Number(delta || 0)),
+    );
+    this._fitCanvas();
   }
 
   _wireSlideCaption() {

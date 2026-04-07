@@ -300,6 +300,9 @@ export class CanvasEngine {
     this._previewW = 0;
     this._previewH = 0;
     this._scale = 1;
+    this._previewZoom = 1;
+    this._availW = 0;
+    this._availH = 0;
     this._animMode = false; // true while playing preview animation
     injectAnimCSS();
   }
@@ -406,10 +409,21 @@ export class CanvasEngine {
 
   /* ── Preview sizing ───────────────────────────────────── */
   setPreviewSize(availW, availH) {
+    this._availW = availW;
+    this._availH = availH;
+    this._applyPreviewScale();
+  }
+
+  setPreviewZoom(zoom = 1) {
+    this._previewZoom = Math.max(0.25, Math.min(3, Number(zoom) || 1));
+    this._applyPreviewScale();
+  }
+
+  _applyPreviewScale() {
     const fmt = getFormat(this._state.formatId);
-    const scaleW = availW / fmt.width;
-    const scaleH = availH / fmt.height;
-    this._scale = Math.min(scaleW, scaleH, 1);
+    const scaleW = (this._availW || fmt.width) / fmt.width;
+    const scaleH = (this._availH || fmt.height) / fmt.height;
+    this._scale = Math.max(0.05, Math.min(scaleW, scaleH) * this._previewZoom);
     this._previewW = Math.round(fmt.width * this._scale);
     this._previewH = Math.round(fmt.height * this._scale);
 

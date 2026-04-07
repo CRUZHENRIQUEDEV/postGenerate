@@ -692,6 +692,20 @@
             >
               ▶ Animações
             </button>
+            <button
+              id="btn-canvas-img-zoom-out"
+              class="btn btn-ghost btn-sm"
+              title="Diminuir zoom do slide no canvas"
+            >
+              🔍−
+            </button>
+            <button
+              id="btn-canvas-img-zoom-in"
+              class="btn btn-ghost btn-sm"
+              title="Aumentar zoom do slide no canvas"
+            >
+              🔍+
+            </button>
             <span id="zoom-badge" class="zoom-badge">50%</span>
           </div>
         </div>
@@ -733,17 +747,19 @@
             </div>
           </div>
           <div id="slides-track" class="slides-track"></div>
-          <div style="margin-top: 8px">
+          <div class="slide-caption-box">
             <label class="label" style="margin-bottom: 4px"
               >Legenda do Post</label
             >
             <textarea
               id="slide-caption-input"
-              class="input"
+              class="input slide-caption-input"
               rows="3"
               placeholder="Escreva a legenda deste slide/post"
             ></textarea>
-            <div style="display: flex; gap: 6px; margin-top: 6px">
+            <div
+              style="display: flex; gap: 6px; margin-top: 6px; flex-shrink: 0"
+            >
               <button id="btn-copy-slide-caption" class="btn btn-ghost btn-sm">
                 Copiar Legenda
               </button>
@@ -1193,6 +1209,13 @@
             <div class="prop-row">
               <span class="prop-label">Zoom</span>
               <div class="prop-controls" style="gap: 6px">
+                <button
+                  id="btn-img-zoom-out"
+                  class="btn btn-ghost btn-sm"
+                  title="Diminuir zoom da imagem selecionada"
+                >
+                  🔍−
+                </button>
                 <input
                   id="prop-img-zoom"
                   type="range"
@@ -1206,6 +1229,13 @@
                 <span id="prop-img-zoom-val" class="text-xs text-muted"
                   >1x</span
                 >
+                <button
+                  id="btn-img-zoom-in"
+                  class="btn btn-ghost btn-sm"
+                  title="Aumentar zoom da imagem selecionada"
+                >
+                  🔍+
+                </button>
               </div>
             </div>
           </div>

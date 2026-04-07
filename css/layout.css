@@ -307,7 +307,8 @@ body {
   border-top: 1px solid var(--border);
   background: var(--sidebar-bg);
   flex-shrink: 0;
-  max-height: 126px;
+  max-height: 230px;
+  min-height: 126px;
   display: flex;
   flex-direction: column;
 }
@@ -317,6 +318,19 @@ body {
   gap: var(--sp-2);
   overflow-x: auto;
   padding: var(--sp-2) var(--sp-4);
+  flex-shrink: 0;
+}
+
+.slide-caption-box {
+  padding: 0 var(--sp-4) var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.slide-caption-input {
+  min-height: 72px;
+  resize: vertical;
 }
 
 .layers-header {
