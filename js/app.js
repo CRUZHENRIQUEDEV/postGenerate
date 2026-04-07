@@ -2056,6 +2056,47 @@ class App {
         }
       });
     document
+      .getElementById("btn-generate-share-link")
+      ?.addEventListener("click", async () => {
+        const scope =
+          document.getElementById("share-scope")?.value ?? "project";
+        if (scope !== "project") {
+          toast("Link disponível apenas para projeto.", "info");
+          return;
+        }
+        if (!this._currentProjectId) {
+          toast("Abra um projeto para gerar link.", "error");
+          return;
+        }
+        const permission =
+          document.getElementById("share-permission")?.value ?? "edit";
+        const link = await this._generateProjectShareLink(
+          this._currentProjectId,
+          permission,
+          { copyToClipboard: false, silent: true },
+        );
+        if (!link) return;
+        document.getElementById("share-link-output").value = link;
+        toast("Link de compartilhamento gerado.", "success");
+      });
+    document
+      .getElementById("btn-copy-share-link")
+      ?.addEventListener("click", async () => {
+        const link = document
+          .getElementById("share-link-output")
+          ?.value?.trim();
+        if (!link) {
+          toast("Gere um link antes de copiar.", "info");
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(link);
+          toast("Link copiado.", "success");
+        } catch {
+          toast("Não foi possível copiar automaticamente.", "error");
+        }
+      });
+    document
       .getElementById("btn-apply-share-code")
       ?.addEventListener("click", async () => {
         await this._applyShareCode();
@@ -2064,6 +2105,8 @@ class App {
 
   _openShareModal() {
     document.getElementById("share-code-output").value = "";
+    const linkEl = document.getElementById("share-link-output");
+    if (linkEl) linkEl.value = "";
     document.getElementById("share-modal")?.classList.add("open");
   }
 
@@ -3621,25 +3664,33 @@ class App {
     }
   }
 
-  async _generateProjectShareLink(projectId, permission = "view") {
+  async _generateProjectShareLink(
+    projectId,
+    permission = "view",
+    { copyToClipboard = true, silent = false } = {},
+  ) {
     if (!projectId) return;
     try {
       if (this._currentProjectId === projectId) {
         await this._saveProjectNow();
       }
       const code = await shareCode.generateProjectCode(projectId, permission);
-      const url = new URL(window.location.href);
-      url.searchParams.set("share", code);
+      const url = new URL(window.location.origin + window.location.pathname);
+      url.hash = `share=${encodeURIComponent(code)}`;
       const link = url.toString();
-      try {
-        await navigator.clipboard?.writeText(link);
-        toast("Link de compartilhamento copiado.", "success");
-      } catch {
-        window.prompt("Copie o link do projeto:", link);
+      if (copyToClipboard) {
+        try {
+          await navigator.clipboard?.writeText(link);
+          if (!silent) toast("Link de compartilhamento copiado.", "success");
+        } catch {
+          window.prompt("Copie o link do projeto:", link);
+        }
       }
+      return link;
     } catch (e) {
-      toast("Erro ao gerar link do projeto.", "error");
+      if (!silent) toast("Erro ao gerar link do projeto.", "error");
       console.error(e);
+      return null;
     }
   }
 
@@ -3689,7 +3740,8 @@ class App {
 
   async _consumeShareLinkFromURL() {
     const url = new URL(window.location.href);
-    const raw = url.searchParams.get("share") || "";
+    const hashParams = new URLSearchParams((url.hash || "").replace(/^#/, ""));
+    const raw = hashParams.get("share") || url.searchParams.get("share") || "";
     if (!raw) return;
     try {
       const envelope = shareCode.parseCode(raw);
@@ -3705,6 +3757,7 @@ class App {
       console.error(e);
     } finally {
       url.searchParams.delete("share");
+      url.hash = "";
       history.replaceState({}, "", url.toString());
     }
   }
