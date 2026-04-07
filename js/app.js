@@ -6,6 +6,8 @@
 import {
   initDB,
   BrandsDB,
+  FontsDB,
+  AssetsDB,
   PresetsDB,
   ColorsDB,
   PostHistoryDB,
@@ -1131,6 +1133,19 @@ class App {
           toast("Erro ao exportar marca.", "error");
           console.error(e);
         }
+      });
+    document
+      .getElementById("btn-import-brand")
+      ?.addEventListener("click", () => {
+        document.getElementById("brand-file-input")?.click();
+      });
+    document
+      .getElementById("brand-file-input")
+      ?.addEventListener("change", async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        await this._importBrandFromFile(file);
+        e.target.value = "";
       });
     document.getElementById("btn-share")?.addEventListener("click", () => {
       this._openShareModal();
@@ -4028,6 +4043,19 @@ class App {
         if (!name) return;
         await this._createProject(name, "slides");
       });
+    document
+      .getElementById("btn-import-project-file")
+      ?.addEventListener("click", () => {
+        document.getElementById("project-file-input")?.click();
+      });
+    document
+      .getElementById("project-file-input")
+      ?.addEventListener("change", async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        await this._importProjectFromFile(file);
+        e.target.value = "";
+      });
   }
 
   async _createProject(name, mode = "slides") {
@@ -4091,6 +4119,7 @@ class App {
         <div class="project-card-meta">
           <div class="project-card-top">
           <div class="project-card-name">${project.name}</div>
+          <button class="project-card-rename" data-export-project="${project.id}" title="Exportar projeto (.json)">⇩</button>
           <button class="project-card-rename" data-share-link-project="${project.id}" title="Gerar link de compartilhamento">🔗</button>
           <button class="project-card-rename" data-rename-project="${project.id}" title="Renomear projeto">✎</button>
           <button class="project-card-delete" data-delete-project="${project.id}" title="Excluir projeto">×</button>
@@ -4101,6 +4130,13 @@ class App {
       card.addEventListener("click", async () => {
         await this._openProject(project.id);
       });
+      card
+        .querySelector(`[data-export-project]`)
+        ?.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await this._exportProjectToFile(project.id);
+        });
       card
         .querySelector(`[data-share-link-project]`)
         ?.addEventListener("click", async (e) => {
@@ -4155,6 +4191,236 @@ class App {
     }
     await this._renderProjectsHome();
     toast("Projeto renomeado.", "success");
+  }
+
+  async _exportProjectToFile(projectId) {
+    const project = await ProjectsDB.get(projectId);
+    if (!project) {
+      toast("Projeto não encontrado.", "error");
+      return;
+    }
+    const brandBundle = await this._collectBrandBundle(project.brandId);
+    const associatedPresets = await this._collectAssociatedPresets(
+      project.brandId,
+    );
+    const payload = {
+      schema: "postgenerate-project-v2",
+      exportedAt: new Date().toISOString(),
+      project: {
+        ...project,
+      },
+      brandBundle,
+      associatedPresets,
+    };
+    const json = JSON.stringify(payload, null, 2);
+    const safeName = String(project.name || "projeto")
+      .toLowerCase()
+      .replace(/[^\w\-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${safeName || "projeto"}.postgenerate.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast("Projeto exportado em JSON.", "success");
+  }
+
+  async _importProjectFromFile(file) {
+    try {
+      const raw = await file.text();
+      const data = JSON.parse(raw);
+      if (
+        !data?.project ||
+        !String(data?.schema || "").startsWith("postgenerate-project-v")
+      ) {
+        throw new Error("Arquivo inválido.");
+      }
+      let importedBrandId = null;
+      if (data?.brandBundle?.brand) {
+        importedBrandId = await this._importBrandBundle(data.brandBundle, {
+          setCurrent: false,
+        });
+      }
+      if (
+        Array.isArray(data?.associatedPresets) &&
+        data.associatedPresets.length
+      ) {
+        for (const preset of data.associatedPresets) {
+          await PresetsDB.save({
+            ...preset,
+            id: crypto.randomUUID(),
+            ownerBrandId: importedBrandId ?? preset.ownerBrandId ?? null,
+            brandId: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      }
+      const source = data.project;
+      const importedId = crypto.randomUUID();
+      const imported = {
+        ...source,
+        id: importedId,
+        name: `${source.name || "Projeto"} (importado)`,
+        brandId: importedBrandId ?? source.brandId ?? null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await ProjectsDB.save(imported);
+      await this._renderProjectsHome();
+      await this._openProject(importedId);
+      toast("Projeto importado com sucesso.", "success");
+    } catch (e) {
+      toast("Falha ao importar arquivo de projeto.", "error");
+      console.error(e);
+    }
+  }
+
+  async _importBrandFromFile(file) {
+    try {
+      const payload = await this._readBrandPayloadFromFile(file);
+      if (!payload?.brand) throw new Error("Arquivo de marca inválido.");
+      await this._importBrandBundle(payload, { setCurrent: true });
+      await this._refreshSidebar();
+      toast("Marca importada com sucesso.", "success");
+    } catch (e) {
+      toast("Falha ao importar marca.", "error");
+      console.error(e);
+    }
+  }
+
+  async _readBrandPayloadFromFile(file) {
+    const name = String(file?.name ?? "").toLowerCase();
+    if (name.endsWith(".zip") && window.JSZip) {
+      const buffer = await file.arrayBuffer();
+      const zip = await window.JSZip.loadAsync(buffer);
+      const entry = zip.file("brand.json");
+      if (!entry) throw new Error("brand.json não encontrado no ZIP.");
+      const text = await entry.async("text");
+      return JSON.parse(text);
+    }
+    const raw = await file.text();
+    return JSON.parse(raw);
+  }
+
+  async _collectBrandBundle(brandId) {
+    if (!brandId) return null;
+    const brand = await BrandsDB.get(brandId);
+    if (!brand) return null;
+    const [fonts, assets, colors, history, docs, aiConfigs] = await Promise.all(
+      [
+        FontsDB.getByBrand(brandId),
+        AssetsDB.getByBrand(brandId),
+        ColorsDB.getByBrand(brandId),
+        PostHistoryDB.getByBrand(brandId),
+        BrandDocsDB.getByBrand(brandId),
+        AIConfigDB.getByBrand(brandId),
+      ],
+    );
+    return { brand, fonts, assets, colors, history, docs, aiConfigs };
+  }
+
+  async _collectAssociatedPresets(brandId) {
+    const all = await PresetsDB.getAll();
+    if (!brandId) return all;
+    return all.filter(
+      (p) => (p.ownerBrandId ?? p.brandId ?? null) === (brandId ?? null),
+    );
+  }
+
+  async _importBrandBundle(bundle, { setCurrent = true } = {}) {
+    const sourceBrand = bundle?.brand;
+    if (!sourceBrand) throw new Error("Pacote de marca inválido.");
+    const now = new Date().toISOString();
+    const newBrandId = crypto.randomUUID();
+    const fontIdMap = new Map();
+    const importedFonts = [];
+    for (const font of bundle.fonts ?? []) {
+      const newFontId = crypto.randomUUID();
+      fontIdMap.set(font.id, newFontId);
+      importedFonts.push({
+        ...font,
+        id: newFontId,
+        brandId: newBrandId,
+        createdAt: now,
+      });
+    }
+    for (const font of importedFonts) await FontsDB.save(font);
+    await BrandsDB.save({
+      ...sourceBrand,
+      id: newBrandId,
+      name: `${sourceBrand.name || "Marca"} (importada)`,
+      fontIds: (sourceBrand.fontIds ?? [])
+        .map((id) => fontIdMap.get(id))
+        .filter(Boolean),
+      createdAt: now,
+      updatedAt: now,
+    });
+    for (const asset of bundle.assets ?? []) {
+      await AssetsDB.save({
+        ...asset,
+        id: crypto.randomUUID(),
+        brandId: newBrandId,
+        createdAt: now,
+      });
+    }
+    for (const color of bundle.colors ?? []) {
+      await ColorsDB.save({
+        ...color,
+        id: crypto.randomUUID(),
+        brandId: newBrandId,
+        isGlobal: 0,
+        createdAt: now,
+      });
+    }
+    for (const h of bundle.history ?? []) {
+      await PostHistoryDB.save({
+        ...h,
+        id: crypto.randomUUID(),
+        brandId: newBrandId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    for (const doc of bundle.docs ?? []) {
+      await BrandDocsDB.save({
+        ...doc,
+        id: crypto.randomUUID(),
+        brandId: newBrandId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    for (const cfg of bundle.aiConfigs ?? []) {
+      await AIConfigDB.save({
+        ...cfg,
+        id: crypto.randomUUID(),
+        brandId: newBrandId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    for (const preset of bundle.presets ?? []) {
+      await PresetsDB.save({
+        ...preset,
+        id: crypto.randomUUID(),
+        ownerBrandId: newBrandId,
+        brandId: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    await this.brands.init();
+    await this._refreshBrandDropdown();
+    if (setCurrent) {
+      await this.brands.setCurrentBrand(newBrandId);
+    }
+    return newBrandId;
   }
 
   _showProjectsHome(show) {

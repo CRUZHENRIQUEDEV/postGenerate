@@ -59,6 +59,15 @@
             <button id="btn-new-project-slides" class="btn btn-primary">
               Novo Projeto (Slides)
             </button>
+            <button id="btn-import-project-file" class="btn">
+              Importar Projeto
+            </button>
+            <input
+              id="project-file-input"
+              type="file"
+              accept=".json,application/json"
+              style="display: none"
+            />
           </div>
         </div>
         <div id="projects-grid" class="projects-grid"></div>
@@ -195,6 +204,19 @@
           >
             Exportar Marca
           </button>
+          <button
+            id="btn-import-brand"
+            class="btn btn-ghost btn-sm"
+            title="Importar pacote de marca"
+          >
+            Importar Marca
+          </button>
+          <input
+            id="brand-file-input"
+            type="file"
+            accept=".json,.zip,application/json,application/zip"
+            style="display: none"
+          />
           <button
             id="btn-share"
             class="btn btn-ghost btn-sm"
