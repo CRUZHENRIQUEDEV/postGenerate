@@ -55,8 +55,9 @@ export class AnimEngine {
     fps = 24,
     filename = "post-animado.webm",
     download = true,
-    qualityScale = 1,
-    videoBitsPerSecond = 12_000_000,
+    qualityScale = 2,
+    videoBitsPerSecond = 25_000_000,
+    onProgress = null,
   } = {}) {
     if (typeof MediaRecorder === "undefined") {
       throw new Error("MediaRecorder não suportado neste navegador.");
@@ -70,8 +71,12 @@ export class AnimEngine {
       qualityScale,
       targetWidth: w,
       targetHeight: h,
+      onProgress: onProgress
+        ? (cur, total) => onProgress({ stage: "frames", current: cur, total })
+        : null,
     });
     if (!frames.length) throw new Error("Não foi possível gerar frames.");
+    onProgress?.({ stage: "encoding", current: 0, total: frames.length });
     const out = document.createElement("canvas");
     out.width = w;
     out.height = h;
@@ -91,10 +96,11 @@ export class AnimEngine {
     }
     recorder.ondataavailable = (e) => e.data?.size && chunks.push(e.data);
     recorder.start();
-    for (const frame of frames) {
-      const img = await this._loadImage(frame);
+    for (let i = 0; i < frames.length; i++) {
+      const img = await this._loadImage(frames[i]);
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(img, 0, 0, w, h);
+      onProgress?.({ stage: "encoding", current: i + 1, total: frames.length });
       await this._wait(1000 / fps);
     }
     recorder.stop();
@@ -108,7 +114,7 @@ export class AnimEngine {
 
   async _captureFrames(
     fps,
-    { qualityScale = 1, targetWidth, targetHeight } = {},
+    { qualityScale = 2, targetWidth, targetHeight, onProgress = null } = {},
   ) {
     const el = document.getElementById(this._canvasId);
     if (!el || !window.html2canvas) return [];
@@ -118,10 +124,14 @@ export class AnimEngine {
     const frames = [];
     const desiredW = Math.max(1, Number(targetWidth) || el.clientWidth || 1);
     const desiredH = Math.max(1, Number(targetHeight) || el.clientHeight || 1);
-    const baseW = Math.max(1, el.clientWidth || desiredW);
-    const baseH = Math.max(1, el.clientHeight || desiredH);
-    const scaleW = desiredW / baseW;
-    const scaleH = desiredH / baseH;
+    // Use getBoundingClientRect (visual/rendered size) instead of clientWidth
+    // because the canvas has CSS transform:scale applied, and html2canvas
+    // captures at the rendered size, not the layout size.
+    const rect = el.getBoundingClientRect();
+    const renderedW = Math.max(1, rect.width || el.clientWidth || desiredW);
+    const renderedH = Math.max(1, rect.height || el.clientHeight || desiredH);
+    const scaleW = desiredW / renderedW;
+    const scaleH = desiredH / renderedH;
     const captureScale = Math.max(1, qualityScale, scaleW, scaleH);
     this._canvas.playAnimations();
     for (let i = 0; i < frameCount; i++) {
@@ -133,6 +143,7 @@ export class AnimEngine {
         scale: captureScale,
       });
       frames.push(snapshot.toDataURL("image/png"));
+      onProgress?.(i + 1, frameCount);
       const elapsed = performance.now() - start;
       const rest = interval - elapsed;
       if (rest > 1) await this._wait(rest);

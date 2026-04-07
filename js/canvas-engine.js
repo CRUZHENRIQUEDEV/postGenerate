@@ -313,9 +313,13 @@ export class CanvasEngine {
   }
 
   setState(state) {
+    const prevFormatId = this._state.formatId;
     this._state = structuredClone(state);
     this._selectedId = null;
     this.render();
+    if (this._state.formatId !== prevFormatId) {
+      this._emit("formatChange", this._state.formatId);
+    }
     this._emit("stateChange", this._state);
     this._emit("selectionChange", null);
   }

@@ -157,6 +157,13 @@ class App {
     // Fit on resize
     window.addEventListener("resize", () => this._fitCanvas());
 
+    // Save when tab is hidden (browser close, switch tab, etc.)
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden" && this._projectDirty) {
+        this._saveProjectNow().catch(() => {});
+      }
+    });
+
     // Click canvas background = deselect
     document.getElementById("post-canvas").addEventListener("click", (e) => {
       if (e.target === canvasEl || e.target.classList.contains("pg-bg")) {
@@ -1502,9 +1509,18 @@ class App {
       card.addEventListener("click", (e) => {
         if (e.target.dataset.deletePreset) return;
         this.canvas.snapshot();
-        this.canvas.setState(preset.state);
+        const nextState = structuredClone(preset.state ?? createDefaultState());
+        if (preset.background && typeof preset.background === "object") {
+          // Preset was saved with background — apply it
+          nextState.background = structuredClone(preset.background);
+        } else {
+          // Preset was saved without background — keep the current canvas background
+          nextState.background = structuredClone(this.canvas.getState().background);
+        }
+        this.canvas.setState(nextState);
         this._fitCanvas();
-        this._updateFormatBadge(preset.state.formatId);
+        this._updateFormatBadge(nextState.formatId);
+        this._updateGradientBar();
         toast(`Preset "${preset.name}" carregado.`, "info");
       });
 
@@ -1825,11 +1841,22 @@ class App {
       .getElementById("btn-export-video")
       ?.addEventListener("click", async () => {
         document.getElementById("export-modal")?.classList.remove("open");
-        toast("Gerando vídeo...", "info");
+        const overlay = this._showVideoProgressOverlay();
         try {
-          await this.anim.exportVideo();
+          await this.anim.exportVideo({
+            onProgress: ({ stage, current, total }) => {
+              const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+              const label =
+                stage === "frames"
+                  ? `Capturando frames… ${current}/${total}`
+                  : `Codificando vídeo… ${current}/${total}`;
+              overlay.update(pct, label);
+            },
+          });
+          overlay.remove();
           toast("Vídeo exportado com sucesso!", "success");
         } catch (e) {
+          overlay.remove();
           toast("Erro ao exportar vídeo.", "error");
           console.error(e);
         }
@@ -1839,6 +1866,36 @@ class App {
   _openExportModal() {
     this._renderExportFormatOptions();
     document.getElementById("export-modal")?.classList.add("open");
+  }
+
+  _showVideoProgressOverlay() {
+    const overlay = document.createElement("div");
+    overlay.style.cssText = `
+      position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.72);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+    `;
+    const label = document.createElement("div");
+    label.style.cssText = "color:#fff;font-size:14px;font-weight:500;";
+    label.textContent = "Preparando vídeo…";
+    const barWrap = document.createElement("div");
+    barWrap.style.cssText =
+      "width:320px;height:8px;background:rgba(255,255,255,0.15);border-radius:4px;overflow:hidden;";
+    const bar = document.createElement("div");
+    bar.style.cssText =
+      "height:100%;width:0%;background:var(--accent,#7BC4EC);border-radius:4px;transition:width 0.2s;";
+    barWrap.appendChild(bar);
+    overlay.appendChild(label);
+    overlay.appendChild(barWrap);
+    document.body.appendChild(overlay);
+    return {
+      update(pct, text) {
+        bar.style.width = pct + "%";
+        label.textContent = text;
+      },
+      remove() {
+        overlay.remove();
+      },
+    };
   }
 
   _renderExportFormatOptions() {
@@ -4607,7 +4664,11 @@ class App {
       "Existe alteração não salva. Clique OK para salvar e continuar, ou Cancelar para permanecer no projeto atual.",
     );
     if (!ok) return false;
-    await this._saveProjectNow();
+    try {
+      await this._saveProjectNow();
+    } catch (e) {
+      console.error("Falha ao salvar antes de sair:", e);
+    }
     return true;
   }
 
@@ -4807,12 +4868,50 @@ class App {
       if (descInput) descInput.value = "";
       this._renderPresetTextFieldsEditor();
       this._renderPresetFixedLayersEditor();
+      this._renderPresetBgPreview();
       this._renderPresetOverwriteList(scopedPresets);
       document.getElementById("preset-save-modal")?.classList.add("open");
     } catch (e) {
       toast("Erro ao abrir modal de preset.", "error");
       console.error(e);
     }
+  }
+
+  _renderPresetBgPreview() {
+    const el = document.getElementById("preset-bg-preview");
+    if (!el) return;
+    const bg = this.canvas.getState().background;
+    const checkbox = document.getElementById("preset-save-include-bg");
+    if (checkbox) checkbox.checked = true;
+    if (!bg) {
+      el.textContent = "Nenhum fundo definido.";
+      return;
+    }
+    const swatch = `<span style="display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:middle;margin-right:4px;${this._bgSwatchStyle(bg)}"></span>`;
+    if (bg.type === "solid") {
+      el.innerHTML = `${swatch}Sólido — ${bg.color ?? "#000"}`;
+    } else if (bg.type === "gradient") {
+      const g = bg.gradient ?? {};
+      el.innerHTML = `${swatch}Gradiente ${g.type ?? "linear"} — ${g.from ?? ""} → ${g.to ?? ""}`;
+    } else if (bg.type === "image") {
+      el.innerHTML = `${swatch}Imagem de fundo`;
+    } else {
+      el.textContent = "Fundo padrão";
+    }
+  }
+
+  _bgSwatchStyle(bg) {
+    if (!bg) return "background:#000;";
+    if (bg.type === "solid") return `background:${bg.color ?? "#000"};`;
+    if (bg.type === "gradient") {
+      const g = bg.gradient ?? {};
+      const dir = g.type === "radial"
+        ? `radial-gradient(ellipse at center,${g.from ?? "#000"},${g.to ?? "#fff"})`
+        : `linear-gradient(${g.angle ?? 135}deg,${g.from ?? "#000"},${g.to ?? "#fff"})`;
+      return `background:${dir};`;
+    }
+    if (bg.type === "image") return "background:#333;";
+    return "background:#000;";
   }
 
   _renderPresetTextFieldsEditor() {
@@ -5042,6 +5141,16 @@ class App {
   }) {
     const thumbnail = await this.exporter.generateThumbnail();
     const state = this.canvas.getState();
+    const includeBg =
+      document.getElementById("preset-save-include-bg")?.checked !== false;
+    const normalizedBackground = includeBg
+      ? this._normalizePresetBackground(state.background, null)
+      : null;
+    // When not including background, reset state bg to transparent default
+    // so loading the preset doesn't override the user's current background.
+    state.background = includeBg
+      ? structuredClone(normalizedBackground)
+      : { type: "solid", color: "#000000" };
     const existingPreset = id ? await PresetsDB.get(id) : null;
 
     // Auto-extract text layer schema if not provided
@@ -5076,12 +5185,58 @@ class App {
       // Fixed (non-text) layers that appear on every slide
       fixedLayerIds: fixedLayerIds ?? existingPreset?.fixedLayerIds ?? null,
       // Snapshot of visual identity at save time
-      background: state.background ?? null,
+      background: normalizedBackground,
       brandPalette: brand?.palette ?? [],
       brandPrimaryFont: brand?.primaryFont ?? "",
       brandVoice: brand?.brandVoice ?? "",
       animations: animationSummary,
     });
+  }
+
+  _normalizePresetBackground(bg, fallback = null) {
+    const source =
+      bg && typeof bg === "object"
+        ? bg
+        : fallback && typeof fallback === "object"
+          ? fallback
+          : { type: "solid", color: "#000000" };
+    if (source.type === "gradient") {
+      const g = source.gradient ?? {};
+      return {
+        type: "gradient",
+        gradient: {
+          type: g.type ?? "linear",
+          from: g.from ?? "#000000",
+          to: g.to ?? "#0e1a2e",
+          angle: Number.isFinite(g.angle) ? g.angle : 135,
+          reach: Number.isFinite(g.reach) ? g.reach : 100,
+          fromReach: Number.isFinite(g.fromReach) ? g.fromReach : 0,
+          toReach: Number.isFinite(g.toReach) ? g.toReach : 100,
+          opacity: Number.isFinite(g.opacity) ? g.opacity : 100,
+          fromOpacity: Number.isFinite(g.fromOpacity)
+            ? g.fromOpacity
+            : Number.isFinite(g.opacity)
+              ? g.opacity
+              : 100,
+          toOpacity: Number.isFinite(g.toOpacity)
+            ? g.toOpacity
+            : Number.isFinite(g.opacity)
+              ? g.opacity
+              : 100,
+        },
+      };
+    }
+    if (source.type === "image") {
+      return {
+        type: "image",
+        image: source.image ?? null,
+        imageSize: source.imageSize ?? "cover",
+      };
+    }
+    return {
+      type: "solid",
+      color: source.color ?? "#000000",
+    };
   }
 
   /** Extract text layer schema from canvas state for AI context */
@@ -5206,8 +5361,14 @@ class App {
     const slides = this.slides.getSlides().map((s) => ({
       id: s.id,
       state: structuredClone(s.state),
+      caption: s.caption ?? "",
     }));
-    const coverThumbnail = await this.exporter.generateThumbnail(220);
+    let coverThumbnail = project.coverThumbnail ?? null;
+    try {
+      coverThumbnail = await this.exporter.generateThumbnail(220);
+    } catch (e) {
+      console.warn("Thumbnail não gerado, mantendo capa anterior.", e);
+    }
     await ProjectsDB.save({
       ...project,
       slides,
