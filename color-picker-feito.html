@@ -1,0 +1,1105 @@
+<!-- Versão: 1.1 -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Picker - ZenithSolutions</title>
+    <style>
+        /* ========== VARIÁVEIS CSS - ZenithSolutions ========== */
+        :root {
+            --ui-accent: #5a6570;
+            --ui-accent-hover: #4a5560;
+            --ui-accent-active: #3a4550;
+            
+            --ui-bg: #f0f0f0;
+            --ui-bg-secondary: #ffffff;
+            --ui-bg-tertiary: #e8e8e8;
+            --ui-card-bg: #ffffff;
+            --ui-input-bg: #ffffff;
+            --ui-toolbar-bg: #f0f0f0;
+            
+            --ui-text: #2d2d2d;
+            --ui-text-secondary: #4a4a4a;
+            --ui-text-muted: #6a6a6a;
+            --ui-text-disabled: #aaaaaa;
+            
+            --ui-border: #c0c0c0;
+            --ui-border-light: #d8d8d8;
+            
+            --ui-focus: #0078d4;
+            
+            --ui-spacing-xs: 4px;
+            --ui-spacing-sm: 8px;
+            --ui-spacing-md: 16px;
+            --ui-spacing-lg: 24px;
+            --ui-spacing-xl: 32px;
+            
+            --ui-radius-sm: 2px;
+            --ui-radius-md: 4px;
+            
+            --ui-font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            --ui-font-size-xs: 11px;
+            --ui-font-size-sm: 12px;
+            --ui-font-size-md: 13px;
+            
+            --ui-transition-fast: 0.1s ease;
+        }
+        
+        [data-theme="dark"] {
+            --ui-accent: #8ec8ee;
+            --ui-accent-hover: #a8d8f4;
+            --ui-accent-active: #70b8e6;
+            
+            --ui-bg: #1e2a35;
+            --ui-bg-secondary: #263545;
+            --ui-bg-tertiary: #2d3e50;
+            --ui-card-bg: #2d3e50;
+            --ui-input-bg: #1e2a35;
+            --ui-toolbar-bg: #1a2430;
+            
+            --ui-text: #e8ebed;
+            --ui-text-secondary: #b0b8c0;
+            --ui-text-muted: #808890;
+            --ui-text-disabled: #505860;
+            
+            --ui-border: #3a4a5a;
+            --ui-border-light: #4a5a6a;
+            
+            --ui-focus: #8ec8ee;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: var(--ui-font-family);
+            font-size: var(--ui-font-size-md);
+            background: var(--ui-bg);
+            color: var(--ui-text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: var(--ui-spacing-lg);
+        }
+        
+        /* ========== DIALOG ========== */
+        .dialog {
+            background: var(--ui-bg-secondary);
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius-lg);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            width: 100%;
+            max-width: 500px;
+            overflow: hidden;
+            user-select: none;
+        }
+        
+        .dialog-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--ui-spacing-sm) var(--ui-spacing-md);
+            background: var(--ui-toolbar-bg);
+            border-bottom: 1px solid var(--ui-border);
+        }
+        
+        .dialog-title {
+            font-size: var(--ui-font-size-md);
+            font-weight: 400;
+        }
+        
+        .dialog-close {
+            background: none;
+            border: none;
+            font-size: 18px;
+            color: var(--ui-text-muted);
+            cursor: pointer;
+            padding: 2px 6px;
+            line-height: 1;
+        }
+        
+        .dialog-close:hover {
+            color: var(--ui-text);
+        }
+        
+        .dialog-body {
+            padding: var(--ui-spacing-md);
+            display: flex;
+            gap: var(--ui-spacing-md);
+        }
+        
+        .dialog-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: var(--ui-spacing-sm);
+            padding: var(--ui-spacing-sm) var(--ui-spacing-md);
+            border-top: 1px solid var(--ui-border);
+            background: var(--ui-bg-secondary);
+        }
+        
+        /* ========== LEFT PANEL ========== */
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            gap: var(--ui-spacing-md);
+            min-width: 180px;
+        }
+        
+        .section-label {
+            font-size: var(--ui-font-size-xs);
+            color: var(--ui-text-secondary);
+            margin-bottom: var(--ui-spacing-xs);
+        }
+        
+        /* ========== COLOR GRIDS ========== */
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+        }
+        
+        .color-swatch {
+            width: 18px;
+            height: 18px;
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius-sm);
+            cursor: pointer;
+            transition: var(--ui-transition-fast);
+        }
+        
+        .color-swatch:hover {
+            transform: scale(1.15);
+            z-index: 1;
+            box-shadow: 0 0 4px rgba(0,0,0,0.3);
+        }
+        
+        .color-swatch.selected {
+            outline: 2px solid var(--ui-focus);
+            outline-offset: 1px;
+        }
+        
+        .color-swatch.empty {
+            background: var(--ui-bg-tertiary);
+            background-image: linear-gradient(45deg, var(--ui-border-light) 25%, transparent 25%),
+                              linear-gradient(-45deg, var(--ui-border-light) 25%, transparent 25%),
+                              linear-gradient(45deg, transparent 75%, var(--ui-border-light) 75%),
+                              linear-gradient(-45deg, transparent 75%, var(--ui-border-light) 75%);
+            background-size: 8px 8px;
+            background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+        }
+        
+        /* ========== NAME & PREVIEW ========== */
+        .name-section {
+            margin-top: var(--ui-spacing-sm);
+        }
+        
+        .color-name {
+            font-size: var(--ui-font-size-sm);
+            color: var(--ui-text);
+            padding: var(--ui-spacing-xs) 0;
+        }
+        
+        .preview-section {
+            margin-top: var(--ui-spacing-sm);
+        }
+        
+        .preview-labels {
+            display: flex;
+            font-size: var(--ui-font-size-xs);
+            color: var(--ui-text-muted);
+            margin-bottom: 2px;
+        }
+        
+        .preview-labels span {
+            flex: 1;
+            text-align: center;
+        }
+        
+        .preview-boxes {
+            display: flex;
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius-md);
+            height: 50px;
+            overflow: hidden;
+        }
+        
+        .preview-box {
+            flex: 1;
+        }
+        
+        #originalColor {
+            background: #000000;
+        }
+        
+        #newColor {
+            background: #000000;
+        }
+        
+        /* ========== RIGHT PANEL ========== */
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: var(--ui-spacing-sm);
+        }
+        
+        .picker-area {
+            display: flex;
+            gap: var(--ui-spacing-sm);
+        }
+        
+        /* ========== COLOR CANVAS ========== */
+        .color-canvas-wrapper {
+            position: relative;
+            width: 180px;
+            height: 180px;
+        }
+        
+        #colorCanvas {
+            width: 180px;
+            height: 180px;
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius-md);
+            cursor: crosshair;
+        }
+        
+        .canvas-crosshair {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 2px rgba(0,0,0,0.8), inset 0 0 2px rgba(0,0,0,0.5);
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+        }
+        
+        /* ========== HUE BAR ========== */
+        .hue-bar-wrapper {
+            position: relative;
+            width: 20px;
+            height: 180px;
+        }
+        
+        #hueBar {
+            width: 20px;
+            height: 180px;
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius-md);
+            cursor: pointer;
+        }
+        
+        .hue-indicator {
+            position: absolute;
+            left: -3px;
+            width: 26px;
+            height: 6px;
+            background: var(--ui-bg-secondary);
+            border: 1px solid var(--ui-border);
+            pointer-events: none;
+            transform: translateY(-50%);
+        }
+        
+        .hue-indicator::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            border: 4px solid transparent;
+            border-left-color: var(--ui-text);
+        }
+        
+        .hue-indicator::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            border: 4px solid transparent;
+            border-right-color: var(--ui-text);
+        }
+        
+        /* ========== INPUTS ========== */
+        .inputs-section {
+            display: flex;
+            gap: var(--ui-spacing-lg);
+        }
+        
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .input-row {
+            display: flex;
+            align-items: center;
+            gap: var(--ui-spacing-xs);
+        }
+        
+        .input-row label {
+            font-size: var(--ui-font-size-xs);
+            color: var(--ui-text-secondary);
+            min-width: 38px;
+            text-align: right;
+        }
+        
+        .input-row input {
+            width: 45px;
+            padding: 2px 4px;
+            font-size: var(--ui-font-size-xs);
+            font-family: var(--ui-font-family);
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius-md);
+            background: var(--ui-input-bg);
+            color: var(--ui-text);
+            text-align: right;
+        }
+        
+        .input-row input:focus {
+            outline: none;
+            border-color: var(--ui-focus);
+        }
+        
+        /* ========== ACTION BUTTONS ========== */
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: var(--ui-spacing-xs);
+            margin-top: var(--ui-spacing-xs);
+        }
+        
+        /* ========== BUTTONS ========== */
+        .ui-btn {
+            padding: var(--ui-spacing-xs) var(--ui-spacing-md);
+            font-size: var(--ui-font-size-sm);
+            font-family: var(--ui-font-family);
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius-md);
+            background: var(--ui-bg-secondary);
+            color: var(--ui-text);
+            cursor: pointer;
+            transition: var(--ui-transition-fast);
+            min-width: 80px;
+        }
+        
+        .ui-btn:hover {
+            background: var(--ui-bg-tertiary);
+        }
+        
+        .ui-btn:active {
+            background: var(--ui-border-light);
+        }
+        
+        .ui-btn:focus {
+            outline: none;
+            border-color: var(--ui-focus);
+        }
+        
+        .ui-btn-primary {
+            background: var(--ui-accent);
+            border-color: var(--ui-accent);
+            color: #ffffff;
+        }
+        
+        [data-theme="dark"] .ui-btn-primary {
+            color: #1e2a35;
+        }
+        
+        .ui-btn-primary:hover {
+            background: var(--ui-accent-hover);
+            border-color: var(--ui-accent-hover);
+        }
+        
+        .ui-btn-sm {
+            padding: 3px var(--ui-spacing-sm);
+            min-width: 70px;
+            font-size: var(--ui-font-size-xs);
+        }
+        
+        /* ========== BOTTOM BAR ========== */
+        .bottom-bar {
+            display: flex;
+            align-items: center;
+            gap: var(--ui-spacing-sm);
+            padding: var(--ui-spacing-sm) var(--ui-spacing-md);
+            background: var(--ui-toolbar-bg);
+            border-top: 1px solid var(--ui-border);
+        }
+        
+        .bottom-color-preview {
+            width: 60px;
+            height: 20px;
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius-sm);
+        }
+        
+        .bottom-color-name {
+            font-size: var(--ui-font-size-sm);
+            color: var(--ui-text);
+        }
+        
+        /* ========== THEME TOGGLE ========== */
+        .theme-toggle {
+            position: fixed;
+            top: var(--ui-spacing-md);
+            right: var(--ui-spacing-md);
+            background: var(--ui-card-bg);
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius-md);
+            padding: var(--ui-spacing-xs) var(--ui-spacing-sm);
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .theme-toggle:hover {
+            background: var(--ui-bg-tertiary);
+        }
+        
+        /* ========== HEX INPUT ========== */
+        .hex-row {
+            display: flex;
+            align-items: center;
+            gap: var(--ui-spacing-xs);
+            margin-top: var(--ui-spacing-sm);
+            padding-top: var(--ui-spacing-sm);
+            border-top: 1px solid var(--ui-border-light);
+        }
+        
+        .hex-row label {
+            font-size: var(--ui-font-size-xs);
+            color: var(--ui-text-secondary);
+        }
+        
+        .hex-row input {
+            width: 70px;
+            padding: 2px 4px;
+            font-size: var(--ui-font-size-xs);
+            font-family: monospace;
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius-md);
+            background: var(--ui-input-bg);
+            color: var(--ui-text);
+        }
+        
+        .hex-row input:focus {
+            outline: none;
+            border-color: var(--ui-focus);
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()" title="Alternar tema">🌓</button>
+    
+    <div class="dialog">
+        <div class="dialog-header">
+            <span class="dialog-title">Color</span>
+            <button class="dialog-close" title="Fechar">&times;</button>
+        </div>
+        
+        <div class="dialog-body">
+            <!-- Left Panel -->
+            <div class="left-panel">
+                <!-- Basic Colors -->
+                <div class="basic-colors-section">
+                    <div class="section-label">Basic colors:</div>
+                    <div class="color-grid" id="basicColors"></div>
+                </div>
+                
+                <!-- Custom Colors -->
+                <div class="custom-colors-section">
+                    <div class="section-label">Custom colors:</div>
+                    <div class="color-grid" id="customColors"></div>
+                </div>
+                
+                <!-- Color Name -->
+                <div class="name-section">
+                    <div class="section-label">Name:</div>
+                    <div class="color-name" id="colorName">Black</div>
+                </div>
+                
+                <!-- Preview -->
+                <div class="preview-section">
+                    <div class="preview-labels">
+                        <span>Original</span>
+                        <span>New</span>
+                    </div>
+                    <div class="preview-boxes">
+                        <div class="preview-box" id="originalColor"></div>
+                        <div class="preview-box" id="newColor"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Panel -->
+            <div class="right-panel">
+                <!-- Picker Area -->
+                <div class="picker-area">
+                    <!-- Saturation/Lightness Canvas -->
+                    <div class="color-canvas-wrapper">
+                        <canvas id="colorCanvas" width="180" height="180"></canvas>
+                        <div class="canvas-crosshair" id="crosshair"></div>
+                    </div>
+                    
+                    <!-- Hue Bar -->
+                    <div class="hue-bar-wrapper">
+                        <canvas id="hueBar" width="20" height="180"></canvas>
+                        <div class="hue-indicator" id="hueIndicator"></div>
+                    </div>
+                </div>
+                
+                <!-- Inputs -->
+                <div class="inputs-section">
+                    <!-- HSL -->
+                    <div class="input-group">
+                        <div class="input-row">
+                            <label>Hue:</label>
+                            <input type="number" id="hueInput" min="0" max="360" value="0">
+                        </div>
+                        <div class="input-row">
+                            <label>Sat:</label>
+                            <input type="number" id="satInput" min="0" max="100" value="0">
+                        </div>
+                        <div class="input-row">
+                            <label>Lum:</label>
+                            <input type="number" id="lumInput" min="0" max="100" value="0">
+                        </div>
+                    </div>
+                    
+                    <!-- RGB -->
+                    <div class="input-group">
+                        <div class="input-row">
+                            <label>Red:</label>
+                            <input type="number" id="redInput" min="0" max="255" value="0">
+                        </div>
+                        <div class="input-row">
+                            <label>Green:</label>
+                            <input type="number" id="greenInput" min="0" max="255" value="0">
+                        </div>
+                        <div class="input-row">
+                            <label>Blue:</label>
+                            <input type="number" id="blueInput" min="0" max="255" value="0">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Hex Input -->
+                <div class="hex-row">
+                    <label>Hex:</label>
+                    <input type="text" id="hexInput" value="#000000" maxlength="7">
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="action-buttons">
+                    <button class="ui-btn ui-btn-sm" onclick="addToCustomColors()">Add</button>
+                    <button class="ui-btn ui-btn-sm" onclick="openColorBooks()">Color Books</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="dialog-footer">
+            <button class="ui-btn ui-btn-primary" onclick="handleOk()">OK</button>
+            <button class="ui-btn" onclick="handleCancel()">Cancel</button>
+        </div>
+        
+        <!-- Bottom Bar -->
+        <div class="bottom-bar">
+            <div class="bottom-color-preview" id="bottomPreview"></div>
+            <span class="bottom-color-name" id="bottomColorName">Black</span>
+        </div>
+    </div>
+    
+    <script>
+        // ========== ESTADO GLOBAL ==========
+        let currentHue = 0;        // 0-360
+        let currentSat = 0;        // 0-100
+        let currentLum = 0;        // 0-100
+        let originalColor = { r: 0, g: 0, b: 0 };
+        let customColors = Array(16).fill(null);
+        let selectedSwatchIndex = -1;
+        
+        // ========== CORES BÁSICAS (48 cores do Windows) ==========
+        const BASIC_COLORS = [
+            // Linha 1 - Vermelhos a Amarelos
+            '#FF0000', '#FF6A00', '#FFD800', '#B6FF00', '#4CFF00', '#00FF21', '#00FF90', '#00FFFF',
+            // Linha 2 - Cianos a Azuis
+            '#0094FF', '#0026FF', '#4800FF', '#B200FF', '#FF00DC', '#FF006E', '#FF8080', '#FFBF80',
+            // Linha 3 - Claros
+            '#FFFF80', '#DBFF80', '#80FF80', '#80FFBF', '#80FFFF', '#80BFFF', '#8080FF', '#BF80FF',
+            // Linha 4 - Médios
+            '#FF80FF', '#FF80BF', '#FF8080', '#C0C0C0', '#808080', '#804040', '#FF8040', '#FFFF00',
+            // Linha 5 - Escuros
+            '#80FF00', '#00FF40', '#00FF80', '#00FFFF', '#0080FF', '#0000FF', '#8000FF', '#FF00FF',
+            // Linha 6 - Muito escuros
+            '#800040', '#800000', '#804000', '#808000', '#408000', '#008000', '#008040', '#000000',
+        ];
+        
+        const COLOR_NAMES = {
+            '#FF0000': 'Red', '#00FF00': 'Lime', '#0000FF': 'Blue', '#FFFF00': 'Yellow',
+            '#FF00FF': 'Magenta', '#00FFFF': 'Cyan', '#FFFFFF': 'White', '#000000': 'Black',
+            '#808080': 'Gray', '#C0C0C0': 'Silver', '#800000': 'Maroon', '#808000': 'Olive',
+            '#008000': 'Green', '#800080': 'Purple', '#008080': 'Teal', '#000080': 'Navy',
+            '#FF6A00': 'Orange', '#FFD800': 'Gold', '#B6FF00': 'Chartreuse', '#4CFF00': 'Lawn Green',
+        };
+        
+        // ========== INICIALIZAÇÃO ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            initBasicColors();
+            initCustomColors();
+            initHueBar();
+            initColorCanvas();
+            initInputListeners();
+            updateFromHSL(0, 0, 0);
+        });
+        
+        // ========== GRIDS DE CORES ==========
+        function initBasicColors() {
+            const container = document.getElementById('basicColors');
+            BASIC_COLORS.forEach((color, index) => {
+                const swatch = document.createElement('div');
+                swatch.className = 'color-swatch';
+                swatch.style.background = color;
+                swatch.dataset.color = color;
+                swatch.dataset.index = index;
+                swatch.onclick = () => selectColorFromSwatch(color, 'basic', index);
+                container.appendChild(swatch);
+            });
+        }
+        
+        function initCustomColors() {
+            const container = document.getElementById('customColors');
+            for (let i = 0; i < 16; i++) {
+                const swatch = document.createElement('div');
+                swatch.className = 'color-swatch empty';
+                swatch.dataset.index = i;
+                swatch.id = `customSwatch${i}`;
+                swatch.onclick = () => {
+                    if (customColors[i]) {
+                        selectColorFromSwatch(customColors[i], 'custom', i);
+                    }
+                };
+                container.appendChild(swatch);
+            }
+        }
+        
+        function selectColorFromSwatch(hexColor, type, index) {
+            // Remove seleção anterior
+            document.querySelectorAll('.color-swatch.selected').forEach(s => s.classList.remove('selected'));
+            
+            // Adiciona seleção
+            const selector = type === 'basic' 
+                ? `#basicColors .color-swatch[data-index="${index}"]`
+                : `#customSwatch${index}`;
+            document.querySelector(selector)?.classList.add('selected');
+            
+            // Converte e atualiza
+            const rgb = hexToRgb(hexColor);
+            const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+            updateFromHSL(hsl.h, hsl.s, hsl.l);
+        }
+        
+        // ========== HUE BAR ==========
+        function initHueBar() {
+            const canvas = document.getElementById('hueBar');
+            const ctx = canvas.getContext('2d');
+            
+            // Desenha gradiente de matiz
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            for (let i = 0; i <= 360; i += 60) {
+                gradient.addColorStop(i / 360, `hsl(${i}, 100%, 50%)`);
+            }
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Event listeners
+            let isDragging = false;
+            
+            canvas.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                updateHueFromMouse(e);
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) updateHueFromMouse(e);
+            });
+            
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+        }
+        
+        function updateHueFromMouse(e) {
+            const canvas = document.getElementById('hueBar');
+            const rect = canvas.getBoundingClientRect();
+            let y = e.clientY - rect.top;
+            y = Math.max(0, Math.min(y, canvas.height));
+            
+            currentHue = Math.round((y / canvas.height) * 360);
+            updateFromHSL(currentHue, currentSat, currentLum);
+            updateHueIndicator();
+            drawColorCanvas();
+        }
+        
+        function updateHueIndicator() {
+            const indicator = document.getElementById('hueIndicator');
+            const y = (currentHue / 360) * 180;
+            indicator.style.top = `${y}px`;
+        }
+        
+        // ========== COLOR CANVAS ==========
+        function initColorCanvas() {
+            const canvas = document.getElementById('colorCanvas');
+            
+            let isDragging = false;
+            
+            canvas.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                updateColorFromMouse(e);
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) updateColorFromMouse(e);
+            });
+            
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+            
+            drawColorCanvas();
+        }
+        
+        function drawColorCanvas() {
+            const canvas = document.getElementById('colorCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Limpa
+            ctx.clearRect(0, 0, width, height);
+            
+            // Fundo com a cor do hue atual
+            ctx.fillStyle = `hsl(${currentHue}, 100%, 50%)`;
+            ctx.fillRect(0, 0, width, height);
+            
+            // Gradiente branco (horizontal)
+            const whiteGradient = ctx.createLinearGradient(0, 0, width, 0);
+            whiteGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            whiteGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = whiteGradient;
+            ctx.fillRect(0, 0, width, height);
+            
+            // Gradiente preto (vertical)
+            const blackGradient = ctx.createLinearGradient(0, 0, 0, height);
+            blackGradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+            blackGradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
+            ctx.fillStyle = blackGradient;
+            ctx.fillRect(0, 0, width, height);
+        }
+        
+        function updateColorFromMouse(e) {
+            const canvas = document.getElementById('colorCanvas');
+            const rect = canvas.getBoundingClientRect();
+            
+            let x = e.clientX - rect.left;
+            let y = e.clientY - rect.top;
+            
+            x = Math.max(0, Math.min(x, canvas.width));
+            y = Math.max(0, Math.min(y, canvas.height));
+            
+            // Converte posição para saturação e luminosidade
+            currentSat = Math.round((x / canvas.width) * 100);
+            currentLum = Math.round(100 - (y / canvas.height) * 100);
+            
+            updateFromHSL(currentHue, currentSat, currentLum);
+            updateCrosshair();
+        }
+        
+        function updateCrosshair() {
+            const crosshair = document.getElementById('crosshair');
+            const x = (currentSat / 100) * 180;
+            const y = ((100 - currentLum) / 100) * 180;
+            crosshair.style.left = `${x}px`;
+            crosshair.style.top = `${y}px`;
+        }
+        
+        // ========== INPUT LISTENERS ==========
+        function initInputListeners() {
+            // HSL inputs
+            document.getElementById('hueInput').addEventListener('change', (e) => {
+                currentHue = clamp(parseInt(e.target.value) || 0, 0, 360);
+                updateFromHSL(currentHue, currentSat, currentLum);
+                updateHueIndicator();
+                drawColorCanvas();
+            });
+            
+            document.getElementById('satInput').addEventListener('change', (e) => {
+                currentSat = clamp(parseInt(e.target.value) || 0, 0, 100);
+                updateFromHSL(currentHue, currentSat, currentLum);
+                updateCrosshair();
+            });
+            
+            document.getElementById('lumInput').addEventListener('change', (e) => {
+                currentLum = clamp(parseInt(e.target.value) || 0, 0, 100);
+                updateFromHSL(currentHue, currentSat, currentLum);
+                updateCrosshair();
+            });
+            
+            // RGB inputs
+            ['redInput', 'greenInput', 'blueInput'].forEach(id => {
+                document.getElementById(id).addEventListener('change', updateFromRgbInputs);
+            });
+            
+            // Hex input
+            document.getElementById('hexInput').addEventListener('change', (e) => {
+                const hex = e.target.value;
+                if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+                    const rgb = hexToRgb(hex);
+                    const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+                    currentHue = hsl.h;
+                    currentSat = hsl.s;
+                    currentLum = hsl.l;
+                    updateFromHSL(currentHue, currentSat, currentLum);
+                    updateHueIndicator();
+                    updateCrosshair();
+                    drawColorCanvas();
+                }
+            });
+        }
+        
+        function updateFromRgbInputs() {
+            const r = clamp(parseInt(document.getElementById('redInput').value) || 0, 0, 255);
+            const g = clamp(parseInt(document.getElementById('greenInput').value) || 0, 0, 255);
+            const b = clamp(parseInt(document.getElementById('blueInput').value) || 0, 0, 255);
+            
+            const hsl = rgbToHsl(r, g, b);
+            currentHue = hsl.h;
+            currentSat = hsl.s;
+            currentLum = hsl.l;
+            
+            updateFromHSL(currentHue, currentSat, currentLum);
+            updateHueIndicator();
+            updateCrosshair();
+            drawColorCanvas();
+        }
+        
+        // ========== ATUALIZAÇÃO GLOBAL ==========
+        function updateFromHSL(h, s, l) {
+            currentHue = h;
+            currentSat = s;
+            currentLum = l;
+            
+            const rgb = hslToRgb(h, s, l);
+            const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+            
+            // Atualiza inputs HSL
+            document.getElementById('hueInput').value = h;
+            document.getElementById('satInput').value = s;
+            document.getElementById('lumInput').value = l;
+            
+            // Atualiza inputs RGB
+            document.getElementById('redInput').value = rgb.r;
+            document.getElementById('greenInput').value = rgb.g;
+            document.getElementById('blueInput').value = rgb.b;
+            
+            // Atualiza hex
+            document.getElementById('hexInput').value = hex;
+            
+            // Atualiza previews
+            document.getElementById('newColor').style.background = hex;
+            document.getElementById('bottomPreview').style.background = hex;
+            
+            // Atualiza nome da cor
+            const colorName = getColorName(hex);
+            document.getElementById('colorName').textContent = colorName;
+            document.getElementById('bottomColorName').textContent = colorName;
+            
+            // Atualiza crosshair e indicador
+            updateCrosshair();
+            updateHueIndicator();
+        }
+        
+        function getColorName(hex) {
+            const upperHex = hex.toUpperCase();
+            if (COLOR_NAMES[upperHex]) return COLOR_NAMES[upperHex];
+            
+            // Gera nome baseado em HSL
+            if (currentLum === 0) return 'Black';
+            if (currentLum === 100) return 'White';
+            if (currentSat === 0) {
+                if (currentLum < 25) return 'Dark Gray';
+                if (currentLum < 50) return 'Gray';
+                if (currentLum < 75) return 'Light Gray';
+                return 'Very Light Gray';
+            }
+            
+            // Nome baseado no hue
+            const hueNames = [
+                [15, 'Red'], [45, 'Orange'], [75, 'Yellow'], [105, 'Lime'],
+                [135, 'Green'], [165, 'Teal'], [195, 'Cyan'], [225, 'Sky Blue'],
+                [255, 'Blue'], [285, 'Purple'], [315, 'Magenta'], [345, 'Pink'], [360, 'Red']
+            ];
+            
+            let hueName = 'Red';
+            for (const [limit, name] of hueNames) {
+                if (currentHue <= limit) {
+                    hueName = name;
+                    break;
+                }
+            }
+            
+            const prefix = currentLum < 40 ? 'Dark ' : (currentLum > 70 ? 'Light ' : '');
+            return prefix + hueName;
+        }
+        
+        // ========== CONVERSÕES DE COR ==========
+        function hslToRgb(h, s, l) {
+            h /= 360;
+            s /= 100;
+            l /= 100;
+            
+            let r, g, b;
+            
+            if (s === 0) {
+                r = g = b = l;
+            } else {
+                const hue2rgb = (p, q, t) => {
+                    if (t < 0) t += 1;
+                    if (t > 1) t -= 1;
+                    if (t < 1/6) return p + (q - p) * 6 * t;
+                    if (t < 1/2) return q;
+                    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                    return p;
+                };
+                
+                const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                const p = 2 * l - q;
+                r = hue2rgb(p, q, h + 1/3);
+                g = hue2rgb(p, q, h);
+                b = hue2rgb(p, q, h - 1/3);
+            }
+            
+            return {
+                r: Math.round(r * 255),
+                g: Math.round(g * 255),
+                b: Math.round(b * 255)
+            };
+        }
+        
+        function rgbToHsl(r, g, b) {
+            r /= 255;
+            g /= 255;
+            b /= 255;
+            
+            const max = Math.max(r, g, b);
+            const min = Math.min(r, g, b);
+            let h, s, l = (max + min) / 2;
+            
+            if (max === min) {
+                h = s = 0;
+            } else {
+                const d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                switch (max) {
+                    case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+                    case g: h = ((b - r) / d + 2) / 6; break;
+                    case b: h = ((r - g) / d + 4) / 6; break;
+                }
+            }
+            
+            return {
+                h: Math.round(h * 360),
+                s: Math.round(s * 100),
+                l: Math.round(l * 100)
+            };
+        }
+        
+        function rgbToHex(r, g, b) {
+            return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+        }
+        
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : { r: 0, g: 0, b: 0 };
+        }
+        
+        function clamp(value, min, max) {
+            return Math.max(min, Math.min(max, value));
+        }
+        
+        // ========== AÇÕES ==========
+        function addToCustomColors() {
+            const hex = document.getElementById('hexInput').value;
+            
+            // Encontra primeiro slot vazio ou usa o último
+            let index = customColors.findIndex(c => c === null);
+            if (index === -1) {
+                // Desloca todas as cores e adiciona no final
+                customColors.shift();
+                customColors.push(hex);
+                index = 15;
+                
+                // Atualiza todos os swatches
+                customColors.forEach((color, i) => {
+                    const swatch = document.getElementById(`customSwatch${i}`);
+                    if (color) {
+                        swatch.style.background = color;
+                        swatch.classList.remove('empty');
+                    }
+                });
+            } else {
+                customColors[index] = hex;
+                const swatch = document.getElementById(`customSwatch${index}`);
+                swatch.style.background = hex;
+                swatch.classList.remove('empty');
+            }
+        }
+        
+        function openColorBooks() {
+            alert('Color Books - Funcionalidade não implementada neste protótipo.\n\nNo Revit, isso abre a biblioteca de cores Pantone, RAL, etc.');
+        }
+        
+        function handleOk() {
+            const hex = document.getElementById('hexInput').value;
+            const rgb = hexToRgb(hex);
+            
+            console.log('Cor selecionada:', {
+                hex: hex,
+                rgb: rgb,
+                hsl: { h: currentHue, s: currentSat, l: currentLum }
+            });
+            
+            alert(`Cor selecionada: ${hex}\nRGB: ${rgb.r}, ${rgb.g}, ${rgb.b}`);
+        }
+        
+        function handleCancel() {
+            console.log('Dialog cancelado');
+            alert('Cancelado');
+        }
+        
+        // ========== TEMA ==========
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            html.setAttribute('data-theme', currentTheme === 'dark' ? '' : 'dark');
+        }
+        
+        // ========== SET ORIGINAL COLOR ==========
+        function setOriginalColor(hex) {
+            originalColor = hexToRgb(hex);
+            document.getElementById('originalColor').style.background = hex;
+        }
+        
+        // Define cor original inicial como preta
+        setOriginalColor('#000000');
+    </script>
+</body>
+</html>
