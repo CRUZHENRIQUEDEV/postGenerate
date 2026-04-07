@@ -1901,14 +1901,16 @@ class App {
   _renderExportFormatOptions() {
     const host = document.getElementById("export-format-options");
     if (!host) return;
-    if (host.childElementCount) return;
-    Object.values(FORMATS).forEach((fmt) => {
+    const currentFmtId = this.canvas.getState().formatId;
+    // Re-render every time so the pre-selected format stays in sync
+    host.innerHTML = "";
+    Object.entries(FORMATS).forEach(([fmtId, fmt]) => {
       const label = document.createElement("label");
       label.style.cssText =
         "display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;";
       label.innerHTML = `
-        <input type="checkbox" class="export-format-checkbox" value="${fmt.id}" ${
-          fmt.id === this.canvas.getState().formatId ? "checked" : ""
+        <input type="checkbox" class="export-format-checkbox" value="${fmtId}" ${
+          fmtId === currentFmtId ? "checked" : ""
         } />
         <span>${fmt.label}</span>
       `;
