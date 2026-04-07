@@ -724,6 +724,13 @@
             <span class="layers-title">Carrossel</span>
             <div style="display: flex; gap: 4px">
               <button
+                id="btn-toggle-caption-box"
+                class="btn btn-ghost btn-sm btn-icon"
+                title="Mostrar/ocultar legenda"
+              >
+                📝
+              </button>
+              <button
                 id="btn-slide-add"
                 class="btn btn-ghost btn-sm btn-icon"
                 title="Adicionar slide"
@@ -747,7 +754,7 @@
             </div>
           </div>
           <div id="slides-track" class="slides-track"></div>
-          <div class="slide-caption-box">
+          <div id="slide-caption-box" class="slide-caption-box">
             <label class="label" style="margin-bottom: 4px"
               >Legenda do Post</label
             >
@@ -772,6 +779,13 @@
           <div class="layers-header">
             <span class="layers-title">Camadas</span>
             <div style="display: flex; gap: 4px">
+              <button
+                id="btn-toggle-layers-list"
+                class="btn btn-ghost btn-sm btn-icon"
+                title="Mostrar/ocultar lista de camadas"
+              >
+                ☰
+              </button>
               <button
                 id="btn-layer-up"
                 class="btn btn-ghost btn-sm btn-icon"

@@ -333,6 +333,10 @@ body {
   resize: vertical;
 }
 
+.slide-caption-box.collapsed {
+  display: none;
+}
+
 .layers-header {
   display: flex;
   align-items: center;
@@ -355,6 +359,10 @@ body {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--surface-3) transparent;
+}
+
+.layers-list.collapsed {
+  display: none;
 }
 
 .layers-list::-webkit-scrollbar {
