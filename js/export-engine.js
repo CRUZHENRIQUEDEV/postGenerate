@@ -211,6 +211,15 @@ export class ExportEngine {
         el.style.letterSpacing = layer.letterSpacing
         el.style.textTransform = layer.textTransform ?? 'none'
         el.style.whiteSpace = 'pre-line'
+        if (layer.hasBorder) {
+          const bw = (layer.borderWidth ?? 2) * cw / 1080
+          const px = (layer.borderPaddingX ?? 16) * cw / 1080
+          const py = (layer.borderPaddingY ?? 8) * cw / 1080
+          el.style.display = 'inline-block'
+          el.style.border = `${bw}px solid ${layer.borderColor ?? 'rgba(255,255,255,0.3)'}`
+          el.style.borderRadius = `${layer.borderRadius ?? 8}px`
+          el.style.padding = `${py}px ${px}px`
+        }
         if (layer.width !== 'auto') el.style.width = `${layer.width * cw / 100}px`
         el.textContent = layer.content
       }
@@ -219,11 +228,35 @@ export class ExportEngine {
       el.style.height = `${(layer.height ?? 40) * ch / 100}px`
       el.style.overflow = 'hidden'
       el.style.borderRadius = `${(layer.borderRadius ?? 0) * cw / 100}px`
+      if (layer.hasBorder) {
+        const bw = (layer.borderWidth ?? 2) * cw / 1080
+        el.style.border = `${bw}px solid ${layer.borderColor ?? 'rgba(255,255,255,0.28)'}`
+      }
       const img = document.createElement('img')
       img.src = layer.src
       img.crossOrigin = 'anonymous'
       img.style.cssText = `width:100%;height:100%;object-fit:${layer.objectFit ?? 'contain'};display:block;`
       el.appendChild(img)
+    } else if (layer.type === 'icon' && layer.svg) {
+      const sz = (layer.size ?? 8) * cw / 100
+      el.style.width = sz + 'px'
+      el.style.height = sz + 'px'
+      el.style.display = 'flex'
+      el.style.alignItems = 'center'
+      el.style.justifyContent = 'center'
+      el.style.color = layer.color ?? '#ffffff'
+      el.style.background = layer.background ?? 'transparent'
+      el.style.borderRadius = `${layer.borderRadius ?? 12}px`
+      if (layer.hasBorder) {
+        const bw = (layer.borderWidth ?? 1) * cw / 1080
+        el.style.border = `${bw}px solid ${layer.borderColor ?? 'rgba(255,255,255,0.32)'}`
+      }
+      el.innerHTML = layer.svg
+      const svgEl = el.querySelector('svg')
+      if (svgEl) {
+        svgEl.style.width = '100%'
+        svgEl.style.height = '100%'
+      }
     } else if (layer.type === 'shape') {
       el.style.width = `${(layer.width ?? 20) * cw / 100}px`
       el.style.height = `${(layer.height ?? 0.5) * ch / 100}px`
