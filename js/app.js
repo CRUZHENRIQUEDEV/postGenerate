@@ -88,6 +88,7 @@ class App {
     this._aiSideOpen = false;
     this._aiBasePresetId = "";
     this._aiPresetsCache = [];
+    this._syncingCaptionUI = false;
     this._shareReadOnly = false;
     this._realtime = {
       active: false,
@@ -140,11 +141,13 @@ class App {
     this._wireIconModal();
     this._wireAnimationPanel();
     this._wireProjectsHome();
+    this._wireSlideCaption();
     this._wireShareModal();
     this._wireAIModal();
     this._wireRealtimeCollab();
     await this.slides.init();
     this.slides.on("change", () => {
+      this._refreshSlideCaptionUI();
       this._markProjectDirty();
       this._queueProjectSave();
     });
@@ -2003,6 +2006,42 @@ class App {
       ?.addEventListener("click", async () => {
         await this._applyCurrentBgToAllSlides();
       });
+  }
+
+  _wireSlideCaption() {
+    document
+      .getElementById("slide-caption-input")
+      ?.addEventListener("input", (e) => {
+        if (this._syncingCaptionUI) return;
+        this.slides.setActiveCaption(e.target.value ?? "");
+      });
+    document
+      .getElementById("btn-copy-slide-caption")
+      ?.addEventListener("click", async () => {
+        const value =
+          document.getElementById("slide-caption-input")?.value?.trim() ?? "";
+        if (!value) {
+          toast("Sem legenda para copiar.", "info");
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(value);
+          toast("Legenda copiada.", "success");
+        } catch {
+          toast("Não foi possível copiar automaticamente.", "error");
+        }
+      });
+    this._refreshSlideCaptionUI();
+  }
+
+  _refreshSlideCaptionUI() {
+    const input = document.getElementById("slide-caption-input");
+    if (!input) return;
+    const active = this.slides?.getActiveSlide?.();
+    const text = active?.caption ?? "";
+    this._syncingCaptionUI = true;
+    input.value = text;
+    this._syncingCaptionUI = false;
   }
 
   async _applyCurrentBgToAllSlides() {

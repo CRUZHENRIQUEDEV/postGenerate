@@ -397,6 +397,7 @@ export class CanvasEngine {
     this._state.formatId = formatId;
     this.render();
     this._emit("formatChange", formatId);
+    this._emit("stateChange", this._state);
   }
 
   getLayers() {

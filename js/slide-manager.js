@@ -22,7 +22,12 @@ export class SlideManager {
 
   async init() {
     this._slides = [
-      { id: crypto.randomUUID(), state: this._canvas.getState(), thumb: "" },
+      {
+        id: crypto.randomUUID(),
+        state: this._canvas.getState(),
+        thumb: "",
+        caption: "",
+      },
     ];
     await this._refreshActiveThumb();
     if (!this._bound) this._bind();
@@ -45,11 +50,25 @@ export class SlideManager {
   }
 
   getSlides() {
-    return this._slides.map((s) => ({ ...s, state: structuredClone(s.state) }));
+    return this._slides.map((s) => ({
+      ...s,
+      state: structuredClone(s.state),
+      caption: s.caption ?? "",
+    }));
   }
 
   getActiveIndex() {
     return this._active;
+  }
+
+  getActiveSlide() {
+    const s = this._slides[this._active];
+    if (!s) return null;
+    return {
+      ...s,
+      state: structuredClone(s.state),
+      caption: s.caption ?? "",
+    };
   }
 
   async loadSlides(slides = [], activeIndex = 0) {
@@ -59,6 +78,7 @@ export class SlideManager {
         id: s.id ?? crypto.randomUUID(),
         state: structuredClone(s.state),
         thumb: s.thumb ?? "",
+        caption: s.caption ?? "",
       }));
     this._slides = valid.length
       ? valid
@@ -67,6 +87,7 @@ export class SlideManager {
             id: crypto.randomUUID(),
             state: this._canvas.getState(),
             thumb: "",
+            caption: "",
           },
         ];
     this._active = Math.min(Math.max(0, activeIndex), this._slides.length - 1);
@@ -82,6 +103,7 @@ export class SlideManager {
       id: crypto.randomUUID(),
       state: structuredClone(state),
       thumb: "",
+      caption: "",
     };
     this._slides.push(slide);
     this._active = this._slides.length - 1;
@@ -97,6 +119,7 @@ export class SlideManager {
       id: crypto.randomUUID(),
       state: structuredClone(src.state),
       thumb: src.thumb,
+      caption: src.caption ?? "",
     };
     this._slides.splice(this._active + 1, 0, copy);
     this._active = this._active + 1;
@@ -121,6 +144,13 @@ export class SlideManager {
     this._active = index;
     this._canvas.setState(structuredClone(this._slides[index].state));
     this.render();
+    this._emit("change", this.getSlides());
+  }
+
+  setActiveCaption(caption = "") {
+    const slide = this._slides[this._active];
+    if (!slide) return;
+    slide.caption = String(caption ?? "");
     this._emit("change", this.getSlides());
   }
 
