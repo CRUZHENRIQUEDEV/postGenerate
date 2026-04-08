@@ -5165,6 +5165,59 @@ class App {
     return items;
   }
 
+  _applyPresetToSlideState(slideState, preset) {
+    // Properties to copy from preset text layer back onto the existing text layer
+    // (visual style) — content is always preserved from the slide.
+    const TEXT_STYLE_PROPS = [
+      "fontFamily","fontSize","fontWeight","fontStyle","color","textAlign",
+      "letterSpacing","lineHeight","textTransform","opacity",
+      "animIn","animDuration","animDelay","animEasing",
+      "x","y","width","height","badgeBg","badgeBorderColor","badgeBorderRadius",
+      "badgePaddingX","badgePaddingY","badgeBorderWidth","subtype",
+    ];
+
+    const nextState = structuredClone(preset.state);
+    nextState._presetId = preset.id;
+
+    // Background: use preset's if it has one, otherwise keep slide's
+    if (preset.background && typeof preset.background === "object") {
+      nextState.background = structuredClone(preset.background);
+    } else {
+      nextState.background = structuredClone(slideState.background);
+    }
+
+    // For text layers: restore visual style from preset but keep the user's content
+    const existingTextLayers = (slideState.layers ?? []).filter(
+      (l) => l.type === "text",
+    );
+    const presetTextLayers = (preset.state.layers ?? []).filter(
+      (l) => l.type === "text",
+    );
+
+    nextState.layers = nextState.layers.map((presetLayer) => {
+      if (presetLayer.type !== "text") return presetLayer;
+      // Match by name first, then by index among text layers
+      const byName = existingTextLayers.find(
+        (el) => el.name && el.name === presetLayer.name,
+      );
+      const byIndex = existingTextLayers[
+        presetTextLayers.findIndex((pl) => pl.id === presetLayer.id)
+      ];
+      const existing = byName ?? byIndex;
+      if (!existing) return presetLayer; // new text layer from preset — keep as placeholder
+      // Merge: style from preset, content from slide
+      const merged = structuredClone(presetLayer);
+      TEXT_STYLE_PROPS.forEach((prop) => {
+        if (prop in presetLayer) merged[prop] = presetLayer[prop];
+      });
+      merged.content = existing.content; // preserve user's text
+      merged.id = existing.id; // keep same id for stability
+      return merged;
+    });
+
+    return nextState;
+  }
+
   async _resetSlideToPreset(slideIndex) {
     const slides = this.slides.getSlides();
     const slide = slides[slideIndex];
@@ -5177,30 +5230,7 @@ class App {
       toast("Preset não encontrado.", "error");
       return;
     }
-    const keepText = confirm(
-      "Manter o texto do slide atual?\n\nOK = mantém texto\nCancelar = reset completo",
-    );
-    const existing = slide.state;
-    const nextState = structuredClone(preset.state);
-    nextState._presetId = preset.id;
-    if (preset.background && typeof preset.background === "object") {
-      nextState.background = structuredClone(preset.background);
-    } else {
-      nextState.background = structuredClone(existing.background);
-    }
-    if (keepText) {
-      // Keep text layers from existing slide, replace structural layers from preset
-      const textLayers = (existing.layers ?? []).filter(
-        (l) => l.type === "text",
-      );
-      const structuralLayers = (preset.state.layers ?? []).filter(
-        (l) => l.type !== "text",
-      );
-      nextState.layers = [
-        ...structuralLayers.map((l) => structuredClone(l)),
-        ...textLayers,
-      ];
-    }
+    const nextState = this._applyPresetToSlideState(slide.state, preset);
     this.canvas.snapshot();
     this.canvas.setState(nextState);
     this._fitCanvas();
@@ -5214,33 +5244,11 @@ class App {
       toast("Preset não encontrado.", "error");
       return;
     }
-    const keepText = confirm(
-      "Manter o texto de cada slide?\n\nOK = mantém texto\nCancelar = reset completo",
-    );
     const allSlides = this.slides.getSlides();
     const activeIdx = this.slides.getActiveIndex();
-    const structuralLayers = (preset.state.layers ?? []).filter(
-      (l) => l.type !== "text",
-    );
     const updatedSlides = allSlides.map((slide) => {
       if (slide.state?._presetId !== presetId) return slide;
-      const nextState = structuredClone(preset.state);
-      nextState._presetId = preset.id;
-      if (preset.background && typeof preset.background === "object") {
-        nextState.background = structuredClone(preset.background);
-      } else {
-        nextState.background = structuredClone(slide.state.background);
-      }
-      if (keepText) {
-        const textLayers = (slide.state.layers ?? []).filter(
-          (l) => l.type === "text",
-        );
-        nextState.layers = [
-          ...structuralLayers.map((l) => structuredClone(l)),
-          ...textLayers,
-        ];
-      }
-      return { ...slide, state: nextState };
+      return { ...slide, state: this._applyPresetToSlideState(slide.state, preset) };
     });
     const resetCount = updatedSlides.filter(
       (s) => s.state?._presetId === presetId,
