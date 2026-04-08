@@ -5238,8 +5238,9 @@ class App {
   async _renderProjectsHome() {
     const grid = document.getElementById("projects-grid");
     if (!grid) return;
+    let projects = [];
     try {
-      const projects = await ProjectsDB.getAll();
+      projects = await ProjectsDB.getAll();
     } catch(e) {
       console.error("[PG] Erro ao carregar projetos:", e);
       grid.innerHTML = '<div class="projects-empty">Erro ao carregar projetos. Verifique o console.</div>';
