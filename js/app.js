@@ -1186,6 +1186,10 @@ class App {
       this._savePresetByNameFlow();
     });
 
+    document.getElementById("btn-reset-preset")?.addEventListener("click", async () => {
+      await this._resetSlideToPreset(this.slides.getActiveIndex());
+    });
+
     document
       .getElementById("btn-export-brand")
       ?.addEventListener("click", async () => {
@@ -2247,6 +2251,13 @@ class App {
     this._syncingCaptionUI = true;
     input.value = text;
     this._syncingCaptionUI = false;
+
+    // Show/hide reset-preset button based on whether active slide has a preset
+    const resetBtn = document.getElementById("btn-reset-preset");
+    if (resetBtn) {
+      const hasPreset = !!(active?.state?._presetId);
+      resetBtn.style.display = hasPreset ? "" : "none";
+    }
   }
 
   async _applyCurrentBgToAllSlides() {
