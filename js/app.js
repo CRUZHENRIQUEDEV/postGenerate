@@ -4350,6 +4350,7 @@ class App {
           <div class="project-card-name">${project.name}</div>
           <button class="project-card-rename" data-export-project="${project.id}" title="Exportar projeto (.json)">⇩</button>
           <button class="project-card-rename" data-share-link-project="${project.id}" title="Gerar link de compartilhamento">🔗</button>
+          <button class="project-card-rename" data-duplicate-project="${project.id}" title="Duplicar projeto">⧉</button>
           <button class="project-card-rename" data-rename-project="${project.id}" title="Renomear projeto">✎</button>
           <button class="project-card-delete" data-delete-project="${project.id}" title="Excluir projeto">×</button>
           </div>
@@ -4372,6 +4373,13 @@ class App {
           e.preventDefault();
           e.stopPropagation();
           await this._generateProjectShareLink(project.id);
+        });
+      card
+        .querySelector(`[data-duplicate-project]`)
+        ?.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await this._duplicateProject(project.id, project.name);
         });
       card
         .querySelector(`[data-rename-project]`)
@@ -4421,6 +4429,28 @@ class App {
     await this._renderProjectsHome();
     toast("Projeto renomeado.", "success");
   }
+
+  async _duplicateProject(projectId, currentName = "") {
+    if (!projectId) return;
+    const newName = prompt(
+      "Nome do projeto duplicado:",
+      `${currentName} (cópia)`,
+    )?.trim();
+    if (!newName) return;
+    const project = await ProjectsDB.get(projectId);
+    if (!project) return;
+    const now = new Date().toISOString();
+    await ProjectsDB.save({
+      ...project,
+      id: crypto.randomUUID(),
+      name: newName,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await this._renderProjectsHome();
+    toast(`Projeto "${newName}" criado.`, "success");
+  }
+
 
   async _exportProjectToFile(projectId) {
     const project = await ProjectsDB.get(projectId);
