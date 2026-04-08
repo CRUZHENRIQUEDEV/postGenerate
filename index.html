@@ -754,6 +754,7 @@
             </div>
           </div>
           <div id="slides-track" class="slides-track"></div>
+          <div id="clipboard-badge" style="display:none;font-size:11px;color:var(--text-muted);padding:2px 8px;text-align:center;"></div>
           <div id="slide-caption-box" class="slide-caption-box">
             <label class="label" style="margin-bottom: 4px"
               >Legenda do Post</label
@@ -822,6 +823,29 @@
             >Propriedades</span
           >
           <div style="display: flex; gap: 4px">
+            <button
+              id="btn-copy-layer"
+              class="btn btn-ghost btn-sm btn-icon"
+              title="Copiar camada (Ctrl+C)"
+            >
+              ⊕
+            </button>
+            <button
+              id="btn-paste-layer"
+              class="btn btn-ghost btn-sm btn-icon"
+              title="Colar camada copiada (Ctrl+V)"
+              style="display:none"
+            >
+              ⊙
+            </button>
+            <button
+              id="btn-paste-layer-all"
+              class="btn btn-ghost btn-sm btn-icon"
+              title="Colar em todos os slides"
+              style="display:none"
+            >
+              ⊛
+            </button>
             <button
               id="btn-duplicate-layer"
               class="btn btn-ghost btn-sm btn-icon"

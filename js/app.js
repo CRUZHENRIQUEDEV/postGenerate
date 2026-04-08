@@ -77,6 +77,7 @@ class App {
     this._savePresetClickTimer = null;
     this._selectedPresetOverwriteId = null;
     this._presetSaveModalBound = false;
+    this._layerClipboard = null; // { layer, sourceSlideIndex }
     this._aiModalBound = false;
     this._aiConfigId = null;
     this._aiDocs = [];
@@ -1098,6 +1099,25 @@ class App {
         this.canvas.updateLayer(layer.id, { animEasing: e.target.value });
       });
 
+    // Copy layer button
+    panel.querySelector("#btn-copy-layer")?.addEventListener("click", () => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer) return;
+      this._copyLayer(layer);
+    });
+
+    // Paste layer button (current slide)
+    panel.querySelector("#btn-paste-layer")?.addEventListener("click", () => {
+      this._pasteLayer();
+    });
+
+    // Paste layer to ALL slides button
+    panel
+      .querySelector("#btn-paste-layer-all")
+      ?.addEventListener("click", async () => {
+        await this._pasteLayerToAllSlides();
+      });
+
     // Duplicate layer button
     panel
       .querySelector("#btn-duplicate-layer")
@@ -1517,6 +1537,7 @@ class App {
           // Preset was saved without background — keep the current canvas background
           nextState.background = structuredClone(this.canvas.getState().background);
         }
+        nextState._presetId = preset.id;
         this.canvas.setState(nextState);
         this._fitCanvas();
         this._updateFormatBadge(nextState.formatId);
@@ -3623,6 +3644,7 @@ class App {
       const textCandidates = this._extractPageTextCandidates(page);
       const textContent = page?.textContent ?? null;
       this._applyTextsToTemplateState(base, textCandidates, textContent);
+      if (this._aiBasePresetId) base._presetId = this._aiBasePresetId;
       return {
         id: crypto.randomUUID(),
         state: base,
@@ -4774,7 +4796,86 @@ class App {
           this.canvas.duplicateLayer(layer.id);
         }
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+        const layer = this.canvas.getSelectedLayer();
+        if (layer) {
+          e.preventDefault();
+          this._copyLayer(layer);
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+        if (this._layerClipboard) {
+          e.preventDefault();
+          this._pasteLayer();
+        }
+      }
     });
+  }
+
+  _copyLayer(layer) {
+    this._layerClipboard = {
+      layer: structuredClone(layer),
+      sourceSlideIndex: this.slides.getActiveIndex(),
+    };
+    this._updateClipboardBadge();
+    toast(`Camada "${layer.name || layer.type}" copiada.`, "info");
+  }
+
+  _pasteLayer() {
+    if (!this._layerClipboard) return;
+    const clone = structuredClone(this._layerClipboard.layer);
+    clone.id = crypto.randomUUID();
+    this.canvas.snapshot();
+    this.canvas.addLayer(clone);
+    toast(`Camada colada no slide ${this.slides.getActiveIndex() + 1}.`, "success");
+  }
+
+  _updateClipboardBadge() {
+    const badge = document.getElementById("clipboard-badge");
+    const pasteBtn = document.getElementById("btn-paste-layer");
+    const pasteAllBtn = document.getElementById("btn-paste-layer-all");
+    const has = !!this._layerClipboard;
+    if (badge) {
+      if (has) {
+        const name = this._layerClipboard.layer.name || this._layerClipboard.layer.type;
+        badge.textContent = `📋 ${name}`;
+        badge.style.display = "";
+      } else {
+        badge.style.display = "none";
+      }
+    }
+    if (pasteBtn) pasteBtn.style.display = has ? "" : "none";
+    if (pasteAllBtn) pasteAllBtn.style.display = has ? "" : "none";
+  }
+
+  async _pasteLayerToAllSlides() {
+    if (!this._layerClipboard) return;
+    const allSlides = this.slides.getSlides();
+    if (allSlides.length <= 1) {
+      this._pasteLayer();
+      return;
+    }
+    const activeIdx = this.slides.getActiveIndex();
+    const updatedSlides = allSlides.map((slide, idx) => {
+      if (idx === activeIdx) return slide; // current slide: paste via canvas normally
+      const clone = structuredClone(this._layerClipboard.layer);
+      clone.id = crypto.randomUUID();
+      return {
+        ...slide,
+        state: {
+          ...slide.state,
+          layers: [...(slide.state.layers ?? []), clone],
+        },
+      };
+    });
+    // Paste on current slide via canvas (preserves undo)
+    this._pasteLayer();
+    // Update all other slides in slide manager
+    await this.slides.loadSlides(updatedSlides, activeIdx);
+    toast(
+      `Camada colada em ${allSlides.length} slides.`,
+      "success",
+    );
   }
 
   /* ── UI helpers ───────────────────────────────────────── */
@@ -5203,6 +5304,9 @@ class App {
         animDelay: l.animDelay,
       }));
 
+    const resolvedFixedLayerIds =
+      fixedLayerIds ?? existingPreset?.fixedLayerIds ?? null;
+
     await PresetsDB.save({
       id,
       createdAt,
@@ -5214,15 +5318,84 @@ class App {
       ownerBrandId: brandId ?? null,
       description: description ?? existingPreset?.description ?? "",
       textFields: resolvedTextFields,
-      // Fixed (non-text) layers that appear on every slide
-      fixedLayerIds: fixedLayerIds ?? existingPreset?.fixedLayerIds ?? null,
-      // Snapshot of visual identity at save time
+      fixedLayerIds: resolvedFixedLayerIds,
       background: normalizedBackground,
       brandPalette: brand?.palette ?? [],
       brandPrimaryFont: brand?.primaryFont ?? "",
       brandVoice: brand?.brandVoice ?? "",
       animations: animationSummary,
     });
+
+    // Propagate structural changes to all slides that use this preset
+    if (id) {
+      const updated = await this._propagatePresetToSlides(
+        id,
+        state,
+        normalizedBackground,
+        includeBg,
+      );
+      if (updated > 0) {
+        toast(
+          `Preset atualizado em ${updated} projeto${updated === 1 ? "" : "s"}.`,
+          "info",
+        );
+      }
+    }
+  }
+
+  async _propagatePresetToSlides(presetId, presetState, presetBackground, includeBg) {
+    const allProjects = await ProjectsDB.getAll();
+    let updatedProjectCount = 0;
+
+    // Layers in the preset that are NOT text — these are the "structural" layers
+    const structuralLayers = (presetState.layers ?? []).filter(
+      (l) => l.type !== "text",
+    );
+
+    for (const project of allProjects) {
+      const slides = project.slides ?? [];
+      let projectChanged = false;
+
+      const updatedSlides = slides.map((slide) => {
+        const state = slide.state;
+        if (!state || state._presetId !== presetId) return slide;
+
+        // Keep text layers from the existing slide (preserves user content)
+        const textLayers = (state.layers ?? []).filter((l) => l.type === "text");
+
+        // Rebuild layers: structural (from preset) + text (from slide)
+        const mergedLayers = [
+          ...structuralLayers.map((l) => structuredClone(l)),
+          ...textLayers,
+        ];
+
+        const updatedState = {
+          ...state,
+          layers: mergedLayers,
+        };
+
+        if (includeBg && presetBackground) {
+          updatedState.background = structuredClone(presetBackground);
+        }
+
+        projectChanged = true;
+        return { ...slide, state: updatedState };
+      });
+
+      if (projectChanged) {
+        await ProjectsDB.save({ ...project, slides: updatedSlides });
+        updatedProjectCount++;
+
+        // If this is the currently open project, reload the slides live
+        if (project.id === this._currentProjectId) {
+          const activeIdx = this.slides.getActiveIndex();
+          await this.slides.loadSlides(updatedSlides, activeIdx);
+          this._updateGradientBar();
+        }
+      }
+    }
+
+    return updatedProjectCount;
   }
 
   _normalizePresetBackground(bg, fallback = null) {
