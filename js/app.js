@@ -151,6 +151,7 @@ class App {
     await this.slides.init();
     this.slides.on("change", () => {
       this._refreshSlideCaptionUI();
+      this._refreshPresetsTab();
       this._markProjectDirty();
       this._queueProjectSave();
     });
@@ -1496,47 +1497,83 @@ class App {
       return;
     }
 
+    const activePresetId = this.canvas.getState()._presetId ?? null;
+    const allSlides = this.slides.getSlides();
+
     container.innerHTML = "";
     presets.reverse().forEach((preset) => {
+      const isActive = preset.id === activePresetId;
+      const slidesUsingPreset = allSlides.filter(
+        (s) => s.state?._presetId === preset.id,
+      ).length;
+
       const card = document.createElement("div");
       card.style.cssText = `
         display: flex; align-items: center; gap: 8px;
         padding: 6px 8px; border-radius: 6px; cursor: pointer;
-        border: 1px solid transparent; margin-bottom: 4px;
-        transition: 0.15s ease;
+        border: 1px solid ${isActive ? "var(--accent)" : "transparent"};
+        background: ${isActive ? "rgba(123,196,236,0.08)" : "transparent"};
+        margin-bottom: 4px; transition: 0.15s ease;
       `;
       card.addEventListener("mouseenter", () => {
-        card.style.background = "var(--surface-hover)";
+        if (!isActive) card.style.background = "var(--surface-hover)";
       });
       card.addEventListener("mouseleave", () => {
-        card.style.background = "transparent";
+        if (!isActive) card.style.background = "transparent";
       });
 
       const thumb = preset.thumbnail
         ? `<img src="${preset.thumbnail}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;">`
         : `<div style="width:32px;height:32px;background:var(--surface-3);border-radius:4px;"></div>`;
 
+      const activeBadge = isActive
+        ? `<span style="font-size:9px;background:var(--accent);color:#000;border-radius:3px;padding:1px 4px;font-weight:600;">ATIVO</span>`
+        : "";
+      const usageText = slidesUsingPreset > 0
+        ? `<span style="font-size:10px;color:var(--text-disabled);">${slidesUsingPreset} slide${slidesUsingPreset > 1 ? "s" : ""}</span>`
+        : "";
+
       card.innerHTML = `
         ${thumb}
         <div style="flex:1;min-width:0;">
-          <div style="font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${preset.name}</div>
-          <div style="font-size:10px;color:var(--text-muted);">${getFormat(preset.formatId).label}</div>
+          <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${preset.name}</span>
+            ${activeBadge}
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:10px;color:var(--text-muted);">${getFormat(preset.formatId).label}</span>
+            ${usageText}
+          </div>
         </div>
-        <button data-delete-preset="${preset.id}" style="
-          background:none;border:none;color:var(--text-disabled);
-          cursor:pointer;font-size:14px;padding:2px;border-radius:4px;
-        ">×</button>
+        <div style="display:flex;gap:2px;align-items:center;flex-shrink:0;">
+          ${isActive ? `
+            <button data-reset-slide="${preset.id}" title="Resetar este slide" style="
+              background:none;border:none;color:var(--accent);
+              cursor:pointer;font-size:13px;padding:2px 4px;border-radius:4px;
+            ">↺</button>
+          ` : ""}
+          ${slidesUsingPreset > 1 ? `
+            <button data-reset-all="${preset.id}" title="Resetar todos os slides (${slidesUsingPreset})" style="
+              background:none;border:none;color:var(--text-muted);
+              cursor:pointer;font-size:13px;padding:2px 4px;border-radius:4px;
+            ">↺↺</button>
+          ` : ""}
+          <button data-delete-preset="${preset.id}" style="
+            background:none;border:none;color:var(--text-disabled);
+            cursor:pointer;font-size:14px;padding:2px 4px;border-radius:4px;
+          ">×</button>
+        </div>
       `;
 
       card.addEventListener("click", (e) => {
         if (e.target.dataset.deletePreset) return;
+        if (e.target.dataset.resetSlide) return;
+        if (e.target.dataset.resetAll) return;
         this.canvas.snapshot();
         const nextState = structuredClone(preset.state ?? createDefaultState());
         if (preset.background && typeof preset.background === "object") {
-          // Preset was saved with background — apply it
           nextState.background = structuredClone(preset.background);
         } else {
-          // Preset was saved without background — keep the current canvas background
           nextState.background = structuredClone(this.canvas.getState().background);
         }
         nextState._presetId = preset.id;
@@ -1547,13 +1584,21 @@ class App {
         toast(`Preset "${preset.name}" carregado.`, "info");
       });
 
-      card
-        .querySelector(`[data-delete-preset]`)
-        ?.addEventListener("click", async (e) => {
-          e.stopPropagation();
-          await PresetsDB.delete(preset.id);
-          await this._refreshPresetsTab();
-        });
+      card.querySelector(`[data-reset-slide]`)?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await this._resetSlideToPreset(this.slides.getActiveIndex());
+      });
+
+      card.querySelector(`[data-reset-all]`)?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await this._resetAllSlidesToPreset(preset.id);
+      });
+
+      card.querySelector(`[data-delete-preset]`)?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await PresetsDB.delete(preset.id);
+        await this._refreshPresetsTab();
+      });
 
       container.appendChild(card);
     });
@@ -4792,6 +4837,18 @@ class App {
     const menu = document.getElementById("ctx-menu");
     if (!menu) return;
 
+    // Slide thumbnail right-click
+    const slideThumbEl = e.target.closest?.(".slide-thumb");
+    if (slideThumbEl) {
+      const track = document.getElementById("slides-track");
+      const idx = Array.from(track?.children ?? []).indexOf(slideThumbEl);
+      if (idx >= 0) {
+        const items = this._buildSlideThumbContextItems(idx);
+        this._renderContextMenuItems(menu, items, e);
+        return;
+      }
+    }
+
     // Find clicked layer by walking up from target
     const layerEl = e.target.closest?.("[data-layer-id]");
     const layerId = layerEl?.dataset?.layerId ?? null;
@@ -4808,6 +4865,10 @@ class App {
       ? this._buildLayerContextItems(layer)
       : this._buildCanvasContextItems();
 
+    this._renderContextMenuItems(menu, items, e);
+  }
+
+  _renderContextMenuItems(menu, items, e) {
     menu.innerHTML = "";
     items.forEach((item) => {
       if (item === "sep") {
@@ -4848,6 +4909,59 @@ class App {
     const y = e.clientY + mh > vh ? e.clientY - mh : e.clientY;
     menu.style.left = x + "px";
     menu.style.top = y + "px";
+  }
+
+  _buildSlideThumbContextItems(idx) {
+    const slides = this.slides.getSlides();
+    const slide = slides[idx];
+    const isActive = idx === this.slides.getActiveIndex();
+    const items = [];
+    items.push({ label: `Slide ${idx + 1}` });
+
+    if (!isActive) {
+      items.push({
+        icon: "▶", text: "Ir para este slide",
+        action: () => this.slides.setActive(idx),
+      });
+      items.push("sep");
+    }
+
+    items.push({
+      icon: "⧉", text: "Duplicar slide",
+      action: async () => {
+        await this.slides.setActive(idx);
+        await this.slides.duplicateActive();
+      },
+    });
+    items.push({
+      icon: "🗑", text: "Remover slide", danger: true,
+      action: async () => {
+        await this.slides.setActive(idx);
+        await this.slides.removeActive();
+      },
+    });
+
+    // Preset reset — only if this slide has a preset linked
+    const presetId = slide?.state?._presetId;
+    if (presetId) {
+      const slidesWithPreset = slides.filter(
+        (s) => s.state?._presetId === presetId,
+      ).length;
+      items.push("sep");
+      items.push({ label: "Preset" });
+      items.push({
+        icon: "↺", text: "Resetar este slide para o preset",
+        action: () => this._resetSlideToPreset(idx),
+      });
+      if (slidesWithPreset > 1) {
+        items.push({
+          icon: "↺", text: `Resetar todos os ${slidesWithPreset} slides`,
+          action: () => this._resetAllSlidesToPreset(presetId),
+        });
+      }
+    }
+
+    return items;
   }
 
   _buildLayerContextItems(layer) {
