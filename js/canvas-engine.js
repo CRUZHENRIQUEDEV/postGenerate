@@ -1277,7 +1277,6 @@ export class CanvasEngine {
     this._emit("layersChange", this._state.layers);
     this._emit("selectionChange", null);
   }
-  }
 
   canUndo() {
     return this._historyIdx > 0;
