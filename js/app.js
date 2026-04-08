@@ -172,6 +172,8 @@ class App {
       }
     });
 
+    this._wireContextMenu();
+
     // Initial sidebar render
     await this._refreshSidebar();
     this._fillBrandIdentityFields(await this.brands.getCurrentBrand());
@@ -4760,6 +4762,368 @@ class App {
       this.picker.loadSavedColors(colors);
     });
     return this.picker.open(initialColor, onLive);
+  }
+
+  /* ── Context menu ────────────────────────────────────── */
+  _wireContextMenu() {
+    const menu = document.getElementById("ctx-menu");
+    if (!menu) return;
+
+    // Prevent default browser context menu everywhere
+    document.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      this._showContextMenu(e);
+    });
+
+    // Close on any click/scroll/key
+    document.addEventListener("click", () => this._closeContextMenu());
+    document.addEventListener("scroll", () => this._closeContextMenu(), true);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") this._closeContextMenu();
+    });
+  }
+
+  _closeContextMenu() {
+    const menu = document.getElementById("ctx-menu");
+    if (menu) menu.style.display = "none";
+  }
+
+  _showContextMenu(e) {
+    const menu = document.getElementById("ctx-menu");
+    if (!menu) return;
+
+    // Find clicked layer by walking up from target
+    const layerEl = e.target.closest?.("[data-layer-id]");
+    const layerId = layerEl?.dataset?.layerId ?? null;
+    const layer = layerId
+      ? this.canvas.getLayers().find((l) => l.id === layerId)
+      : null;
+
+    // Select it if not already selected
+    if (layer && this.canvas.getSelectedLayer()?.id !== layerId) {
+      this.canvas.selectLayer(layerId);
+    }
+
+    const items = layer
+      ? this._buildLayerContextItems(layer)
+      : this._buildCanvasContextItems();
+
+    menu.innerHTML = "";
+    items.forEach((item) => {
+      if (item === "sep") {
+        const sep = document.createElement("div");
+        sep.className = "ctx-separator";
+        menu.appendChild(sep);
+        return;
+      }
+      if (item.label && !item.action) {
+        const lbl = document.createElement("div");
+        lbl.className = "ctx-label";
+        lbl.textContent = item.label;
+        menu.appendChild(lbl);
+        return;
+      }
+      const el = document.createElement("div");
+      el.className = "ctx-item" + (item.danger ? " danger" : "");
+      el.innerHTML = `
+        <span class="ctx-icon">${item.icon ?? ""}</span>
+        <span>${item.text}</span>
+        ${item.shortcut ? `<span class="ctx-shortcut">${item.shortcut}</span>` : ""}
+      `;
+      el.addEventListener("mousedown", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this._closeContextMenu();
+        item.action();
+      });
+      menu.appendChild(el);
+    });
+
+    if (!menu.children.length) return;
+
+    menu.style.display = "block";
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const mw = 200, mh = menu.scrollHeight;
+    const x = e.clientX + mw > vw ? e.clientX - mw : e.clientX;
+    const y = e.clientY + mh > vh ? e.clientY - mh : e.clientY;
+    menu.style.left = x + "px";
+    menu.style.top = y + "px";
+  }
+
+  _buildLayerContextItems(layer) {
+    const items = [];
+    const isLocked = !!layer.locked;
+    const isVisible = layer.visible !== false;
+    const slides = this.slides.getSlides();
+
+    items.push({ label: layer.name || layer.type });
+
+    // ── Edição ──
+    if (layer.type === "text" && !isLocked) {
+      items.push({
+        icon: "✏️", text: "Editar texto",
+        action: () => {
+          const el = document.querySelector(`[data-layer-id="${layer.id}"]`);
+          el?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+        },
+      });
+    }
+    if (layer.type === "image" && !isLocked) {
+      items.push({
+        icon: "🖼️", text: "Substituir imagem",
+        action: () => {
+          this._openFilePicker("image/*", (file) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              this.canvas.snapshot();
+              this.canvas.updateLayer(layer.id, { src: ev.target.result });
+            };
+            reader.readAsDataURL(file);
+          });
+        },
+      });
+    }
+
+    items.push("sep");
+
+    // ── Clipboard ──
+    items.push({
+      icon: "📋", text: "Copiar camada", shortcut: "Ctrl+C",
+      action: () => this._copyLayer(layer),
+    });
+    if (slides.length > 1) {
+      items.push({
+        icon: "⊛", text: "Colar em todos os slides",
+        action: () => {
+          this._copyLayer(layer);
+          this._pasteLayerToAllSlides();
+        },
+      });
+    }
+    items.push({
+      icon: "⧉", text: "Duplicar", shortcut: "Ctrl+D",
+      action: () => {
+        this.canvas.snapshot();
+        this.canvas.duplicateLayer(layer.id);
+      },
+    });
+
+    items.push("sep");
+
+    // ── Organização ──
+    items.push({
+      icon: "⬆", text: "Mover para frente",
+      action: () => { this.canvas.snapshot(); this.canvas.moveLayer(layer.id, "up"); },
+    });
+    items.push({
+      icon: "⬇", text: "Mover para trás",
+      action: () => { this.canvas.snapshot(); this.canvas.moveLayer(layer.id, "down"); },
+    });
+
+    items.push("sep");
+
+    // ── Visibilidade / lock ──
+    items.push({
+      icon: isVisible ? "👁" : "🚫", text: isVisible ? "Ocultar" : "Mostrar",
+      action: () => { this.canvas.snapshot(); this.canvas.updateLayer(layer.id, { visible: !isVisible }); },
+    });
+    items.push({
+      icon: isLocked ? "🔓" : "🔒", text: isLocked ? "Desbloquear" : "Bloquear",
+      action: () => this.canvas.updateLayer(layer.id, { locked: !isLocked }),
+    });
+
+    // ── Alinhamento (só se não bloqueado) ──
+    if (!isLocked) {
+      items.push("sep");
+      items.push({ label: "Alinhar" });
+      items.push({
+        icon: "⬛", text: "Centralizar horizontalmente",
+        action: () => {
+          this.canvas.snapshot();
+          const w = layer.width ?? 30;
+          this.canvas.updateLayer(layer.id, { x: 50 - w / 2 });
+        },
+      });
+      items.push({
+        icon: "⬛", text: "Centralizar verticalmente",
+        action: () => {
+          this.canvas.snapshot();
+          const h = layer.height ?? 10;
+          this.canvas.updateLayer(layer.id, { y: 50 - h / 2 });
+        },
+      });
+      items.push({
+        icon: "⬛", text: "Centralizar na tela",
+        action: () => {
+          this.canvas.snapshot();
+          const w = layer.width ?? 30, h = layer.height ?? 10;
+          this.canvas.updateLayer(layer.id, { x: 50 - w / 2, y: 50 - h / 2 });
+        },
+      });
+    }
+
+    items.push("sep");
+
+    // ── Perigoso ──
+    items.push({
+      icon: "🗑", text: "Deletar", shortcut: "Del", danger: true,
+      action: () => {
+        if (isLocked) { toast("Camada bloqueada.", "error"); return; }
+        this.canvas.snapshot();
+        this.canvas.removeLayer(layer.id);
+      },
+    });
+
+    return items;
+  }
+
+  _buildCanvasContextItems() {
+    const items = [];
+    items.push({ label: "Canvas" });
+    items.push({
+      icon: "↩", text: "Desfazer", shortcut: "Ctrl+Z",
+      action: () => this.canvas.undo(),
+    });
+    items.push({
+      icon: "↪", text: "Refazer", shortcut: "Ctrl+Y",
+      action: () => this.canvas.redo(),
+    });
+    if (this._layerClipboard) {
+      items.push("sep");
+      items.push({
+        icon: "⊙", text: "Colar camada", shortcut: "Ctrl+V",
+        action: () => this._pasteLayer(),
+      });
+      if (this.slides.getSlides().length > 1) {
+        items.push({
+          icon: "⊛", text: "Colar em todos os slides",
+          action: () => this._pasteLayerToAllSlides(),
+        });
+      }
+    }
+    items.push("sep");
+    items.push({
+      icon: "➕", text: "Adicionar texto",
+      action: () => { this.canvas.snapshot(); this.canvas.addLayer(makeTextLayer()); },
+    });
+    items.push({
+      icon: "🖼️", text: "Adicionar imagem",
+      action: () => document.getElementById("btn-add-image")?.click(),
+    });
+    items.push({
+      icon: "◼", text: "Adicionar forma",
+      action: () => document.getElementById("btn-add-shape")?.click(),
+    });
+
+    // Preset reset options — only if this slide has a preset linked
+    const activeState = this.canvas.getState();
+    const presetId = activeState._presetId;
+    if (presetId) {
+      const allSlides = this.slides.getSlides();
+      const slidesWithPreset = allSlides.filter(
+        (s) => s.state?._presetId === presetId,
+      ).length;
+      items.push("sep");
+      items.push({ label: "Preset vinculado" });
+      items.push({
+        icon: "↺", text: "Resetar este slide para o preset",
+        action: () => this._resetSlideToPreset(this.slides.getActiveIndex()),
+      });
+      if (slidesWithPreset > 1) {
+        items.push({
+          icon: "↺", text: `Resetar todos os slides (${slidesWithPreset})`,
+          action: () => this._resetAllSlidesToPreset(presetId),
+        });
+      }
+    }
+
+    return items;
+  }
+
+  async _resetSlideToPreset(slideIndex) {
+    const slides = this.slides.getSlides();
+    const slide = slides[slideIndex];
+    if (!slide?.state?._presetId) {
+      toast("Este slide não tem preset vinculado.", "error");
+      return;
+    }
+    const preset = await PresetsDB.get(slide.state._presetId);
+    if (!preset?.state) {
+      toast("Preset não encontrado.", "error");
+      return;
+    }
+    const keepText = confirm(
+      "Manter o texto do slide atual?\n\nOK = mantém texto\nCancelar = reset completo",
+    );
+    const existing = slide.state;
+    const nextState = structuredClone(preset.state);
+    nextState._presetId = preset.id;
+    if (preset.background && typeof preset.background === "object") {
+      nextState.background = structuredClone(preset.background);
+    } else {
+      nextState.background = structuredClone(existing.background);
+    }
+    if (keepText) {
+      // Keep text layers from existing slide, replace structural layers from preset
+      const textLayers = (existing.layers ?? []).filter(
+        (l) => l.type === "text",
+      );
+      const structuralLayers = (preset.state.layers ?? []).filter(
+        (l) => l.type !== "text",
+      );
+      nextState.layers = [
+        ...structuralLayers.map((l) => structuredClone(l)),
+        ...textLayers,
+      ];
+    }
+    this.canvas.snapshot();
+    this.canvas.setState(nextState);
+    this._fitCanvas();
+    this._updateGradientBar();
+    toast("Slide resetado para o preset.", "success");
+  }
+
+  async _resetAllSlidesToPreset(presetId) {
+    const preset = await PresetsDB.get(presetId);
+    if (!preset?.state) {
+      toast("Preset não encontrado.", "error");
+      return;
+    }
+    const keepText = confirm(
+      "Manter o texto de cada slide?\n\nOK = mantém texto\nCancelar = reset completo",
+    );
+    const allSlides = this.slides.getSlides();
+    const activeIdx = this.slides.getActiveIndex();
+    const structuralLayers = (preset.state.layers ?? []).filter(
+      (l) => l.type !== "text",
+    );
+    const updatedSlides = allSlides.map((slide) => {
+      if (slide.state?._presetId !== presetId) return slide;
+      const nextState = structuredClone(preset.state);
+      nextState._presetId = preset.id;
+      if (preset.background && typeof preset.background === "object") {
+        nextState.background = structuredClone(preset.background);
+      } else {
+        nextState.background = structuredClone(slide.state.background);
+      }
+      if (keepText) {
+        const textLayers = (slide.state.layers ?? []).filter(
+          (l) => l.type === "text",
+        );
+        nextState.layers = [
+          ...structuralLayers.map((l) => structuredClone(l)),
+          ...textLayers,
+        ];
+      }
+      return { ...slide, state: nextState };
+    });
+    const resetCount = updatedSlides.filter(
+      (s) => s.state?._presetId === presetId,
+    ).length;
+    await this.slides.loadSlides(updatedSlides, activeIdx);
+    this._fitCanvas();
+    this._updateGradientBar();
+    toast(`${resetCount} slide(s) resetados para o preset.`, "success");
   }
 
   /* ── Keyboard shortcuts ───────────────────────────────── */
