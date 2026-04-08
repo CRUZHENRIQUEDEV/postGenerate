@@ -54,20 +54,31 @@ export class ExportEngine {
         const g = bg.gradient;
         const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
         const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
-        const fromOpacity = Math.max(
-          0,
-          Math.min(100, g.fromOpacity ?? g.opacity ?? 100),
-        );
-        const toOpacity = Math.max(
-          0,
-          Math.min(100, g.toOpacity ?? g.opacity ?? 100),
-        );
+        const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? g.opacity ?? 100));
+        const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? g.opacity ?? 100));
         const from = this._withOpacity(g.from, fromOpacity);
         const to = this._withOpacity(g.to, toOpacity);
-        clone.style.background =
-          g.type === "linear"
-            ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
-            : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
+
+        // If any stop has low opacity, composite over solid fallback to avoid transparency
+        if (fromOpacity < 100 || toOpacity < 100) {
+          clone.style.background = g.to;
+          clone.style.position = "relative";
+          const overlay = document.createElement("div");
+          overlay.style.cssText = `
+            position: absolute; inset: 0;
+            background: ${
+              g.type === "linear"
+                ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+                : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`
+            };
+          `;
+          clone.appendChild(overlay);
+        } else {
+          clone.style.background =
+            g.type === "linear"
+              ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+              : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
+        }
       } else if (bg.type === "image" && bg.image) {
         clone.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
       }
@@ -142,9 +153,25 @@ export class ExportEngine {
         const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? g.opacity ?? 100));
         const from = this._withOpacity(g.from, fromOpacity);
         const to = this._withOpacity(g.to, toOpacity);
-        clone.style.background = g.type === "linear"
-          ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
-          : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
+
+        if (fromOpacity < 100 || toOpacity < 100) {
+          clone.style.background = g.to;
+          clone.style.position = "relative";
+          const overlay = document.createElement("div");
+          overlay.style.cssText = `
+            position: absolute; inset: 0;
+            background: ${
+              g.type === "linear"
+                ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+                : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`
+            };
+          `;
+          clone.appendChild(overlay);
+        } else {
+          clone.style.background = g.type === "linear"
+            ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+            : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
+        }
       } else if (bg.type === "image" && bg.image) {
         clone.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
       }
@@ -213,20 +240,29 @@ export class ExportEngine {
         const g = bg.gradient;
         const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
         const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
-        const fromOpacity = Math.max(
-          0,
-          Math.min(100, g.fromOpacity ?? g.opacity ?? 100),
-        );
-        const toOpacity = Math.max(
-          0,
-          Math.min(100, g.toOpacity ?? g.opacity ?? 100),
-        );
+        const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? g.opacity ?? 100));
+        const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? g.opacity ?? 100));
         const from = this._withOpacity(g.from, fromOpacity);
         const to = this._withOpacity(g.to, toOpacity);
-        clone.style.background =
-          g.type === "linear"
+
+        if (fromOpacity < 100 || toOpacity < 100) {
+          clone.style.background = g.to;
+          clone.style.position = "relative";
+          const overlay = document.createElement("div");
+          overlay.style.cssText = `
+            position: absolute; inset: 0;
+            background: ${
+              g.type === "linear"
+                ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+                : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`
+            };
+          `;
+          clone.appendChild(overlay);
+        } else {
+          clone.style.background = g.type === "linear"
             ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
             : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
+        }
       } else if (bg.type === "image" && bg.image) {
         clone.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
       }
@@ -362,20 +398,29 @@ export class ExportEngine {
       const g = bg.gradient;
       const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
       const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
-      const fromOpacity = Math.max(
-        0,
-        Math.min(100, g.fromOpacity ?? g.opacity ?? 100),
-      );
-      const toOpacity = Math.max(
-        0,
-        Math.min(100, g.toOpacity ?? g.opacity ?? 100),
-      );
+      const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? g.opacity ?? 100));
+      const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? g.opacity ?? 100));
       const from = this._withOpacity(g.from, fromOpacity);
       const to = this._withOpacity(g.to, toOpacity);
-      clone.style.background =
-        g.type === "linear"
+
+      if (fromOpacity < 100 || toOpacity < 100) {
+        clone.style.background = g.to;
+        clone.style.position = "relative";
+        const overlay = document.createElement("div");
+        overlay.style.cssText = `
+          position: absolute; inset: 0;
+          background: ${
+            g.type === "linear"
+              ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+              : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`
+          };
+        `;
+        clone.appendChild(overlay);
+      } else {
+        clone.style.background = g.type === "linear"
           ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
           : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
+      }
     }
 
     for (const layer of state.layers) {
