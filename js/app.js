@@ -1550,6 +1550,10 @@ class App {
           </div>
         </div>
         <div style="display:flex;gap:2px;align-items:center;flex-shrink:0;">
+          <button data-apply-style="${preset.id}" title="Aplicar estilo ao slide atual (preserva conteúdo)" style="
+            background:none;border:none;color:var(--text-muted);
+            cursor:pointer;font-size:11px;padding:2px 4px;border-radius:4px;white-space:nowrap;
+          ">⊕</button>
           ${isActive ? `
             <button data-reset-slide="${preset.id}" title="Resetar este slide" style="
               background:none;border:none;color:var(--accent);
@@ -1573,6 +1577,7 @@ class App {
         if (e.target.dataset.deletePreset) return;
         if (e.target.dataset.resetSlide) return;
         if (e.target.dataset.resetAll) return;
+        if (e.target.dataset.applyStyle) return;
         this.canvas.snapshot();
         const nextState = structuredClone(preset.state ?? createDefaultState());
         if (preset.background && typeof preset.background === "object") {
@@ -1586,6 +1591,18 @@ class App {
         this._updateFormatBadge(nextState.formatId);
         this._updateGradientBar();
         toast(`Preset "${preset.name}" carregado.`, "info");
+      });
+
+      card.querySelector(`[data-apply-style]`)?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const currentState = this.canvas.getState();
+        const nextState = this._applyPresetToSlideState(currentState, preset);
+        this.canvas.snapshot();
+        this.canvas.setState(nextState);
+        this._fitCanvas();
+        this._updateFormatBadge(nextState.formatId);
+        this._updateGradientBar();
+        toast(`Estilo de "${preset.name}" aplicado.`, "success");
       });
 
       card.querySelector(`[data-reset-slide]`)?.addEventListener("click", async (e) => {
