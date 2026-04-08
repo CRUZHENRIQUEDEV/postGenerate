@@ -98,6 +98,7 @@ export class SlideManager {
   }
 
   async addFromCurrent() {
+    this._canvas.snapshot();
     const state = this._canvas.getState();
     const slide = {
       id: crypto.randomUUID(),
@@ -113,6 +114,7 @@ export class SlideManager {
   }
 
   async duplicateActive() {
+    this._canvas.snapshot();
     const src = this._slides[this._active];
     if (!src) return;
     const copy = {
@@ -130,6 +132,7 @@ export class SlideManager {
 
   async removeActive() {
     if (this._slides.length <= 1) return;
+    this._canvas.snapshot();
     this._slides.splice(this._active, 1);
     this._active = Math.max(0, this._active - 1);
     const next = this._slides[this._active];
@@ -179,11 +182,38 @@ export class SlideManager {
     this._slides.forEach((slide, idx) => {
       const card = document.createElement("button");
       card.className = `slide-thumb${idx === this._active ? " active" : ""}`;
+      card.draggable = true;
+      card.dataset.slideIdx = idx;
       card.innerHTML = `
         <span class="slide-thumb-label">${idx + 1}</span>
         ${slide.thumb ? `<img src="${slide.thumb}" alt="Slide ${idx + 1}">` : '<span class="text-muted text-xs">Sem preview</span>'}
       `;
       card.addEventListener("click", () => this.setActive(idx));
+      card.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", String(idx));
+        card.classList.add("dragging");
+      });
+      card.addEventListener("dragend", () => card.classList.remove("dragging"));
+      card.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        card.classList.add("drag-over");
+      });
+      card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+      card.addEventListener("drop", (e) => {
+        e.preventDefault();
+        card.classList.remove("drag-over");
+        const fromIdx = parseInt(e.dataTransfer.getData("text/plain"));
+        const toIdx = parseInt(card.dataset.slideIdx);
+        if (fromIdx === toIdx) return;
+        this._canvas.snapshot();
+        const [moved] = this._slides.splice(fromIdx, 1);
+        this._slides.splice(toIdx, 0, moved);
+        if (this._active === fromIdx) this._active = toIdx;
+        else if (fromIdx < this._active && toIdx >= this._active) this._active--;
+        else if (fromIdx > this._active && toIdx <= this._active) this._active++;
+        this.render();
+        this._emit("change", this.getSlides());
+      });
       this._track.appendChild(card);
     });
   }

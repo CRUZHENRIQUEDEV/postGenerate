@@ -25,7 +25,25 @@ export function injectAnimCSS() {
     @keyframes pg-move-right { from { opacity:0; transform:translateX(14%) } to { opacity:1; transform:translateX(0) } }
     @keyframes pg-rotate-in { from { opacity:0; transform:rotate(-12deg) scale(0.84) } to { opacity:1; transform:rotate(0deg) scale(1) } }
 
+    @keyframes pg-fade-out    { from { opacity:1 } to { opacity:0 } }
+    @keyframes pg-slide-up-out    { from { opacity:1; transform:translateY(0) } to { opacity:0; transform:translateY(-6%) } }
+    @keyframes pg-slide-down-out  { from { opacity:1; transform:translateY(0) } to { opacity:0; transform:translateY(6%) } }
+    @keyframes pg-slide-left-out  { from { opacity:1; transform:translateX(0)} to { opacity:0; transform:translateX(-8%)} }
+    @keyframes pg-slide-right-out { from { opacity:1; transform:translateX(0) } to { opacity:0; transform:translateX(8%) } }
+    @keyframes pg-scale-out   { from { opacity:1; transform:scale(1) } to { opacity:0; transform:scale(0.82) } }
+    @keyframes pg-blur-out { from { opacity:1; filter:blur(0) }    to { opacity:0; filter:blur(18px) } }
+    @keyframes pg-bounce-out  { 0%{opacity:1;transform:scale(1)} 20%{transform:scale(0.9)} 40%{transform:scale(1.02)} 60%{transform:scale(0.96)} 80%{transform:scale(1.02)} 100%{opacity:0;transform:scale(0.6)} }
+    @keyframes pg-move-up-out { from { opacity:1; transform:translateY(0) } to { opacity:0; transform:translateY(-14%) } }
+    @keyframes pg-move-down-out { from { opacity:1; transform:translateY(0) } to { opacity:0; transform:translateY(14%) } }
+    @keyframes pg-move-left-out { from { opacity:1; transform:translateX(0) } to { opacity:0; transform:translateX(-14%) } }
+    @keyframes pg-move-right-out { from { opacity:1; transform:translateX(0) } to { opacity:0; transform:translateX(14%) } }
+    @keyframes pg-rotate-out { from { opacity:1; transform:rotate(0deg) scale(1) } to { opacity:0; transform:rotate(12deg) scale(0.84) } }
+
     .pg-layer.pg-playing[data-anim]:not([data-anim="none"]) {
+      animation-fill-mode: both;
+      animation-timing-function: cubic-bezier(0.22,1,0.36,1);
+    }
+    .pg-layer.pg-playing[data-anim-out]:not([data-anim-out="none"]) {
       animation-fill-mode: both;
       animation-timing-function: cubic-bezier(0.22,1,0.36,1);
     }
@@ -40,6 +58,9 @@ const ANIM_DEFAULTS = {
   animDuration: 0.65, // seconds
   animDelay: 0, // seconds
   animEasing: "cubic-bezier(0.22,1,0.36,1)",
+  animOut: "none",
+  animOutDuration: 0.65,
+  animOutDelay: 0,
 };
 
 /* ── Default state ──────────────────────────────────────── */
@@ -295,7 +316,7 @@ export class CanvasEngine {
   constructor(canvasEl) {
     this._el = canvasEl;
     this._state = createDefaultState();
-    this._selectedId = null;
+    this._selectedIds = new Set();
     this._listeners = {};
     this._previewW = 0;
     this._previewH = 0;
@@ -304,7 +325,11 @@ export class CanvasEngine {
     this._availW = 0;
     this._availH = 0;
     this._animMode = false; // true while playing preview animation
+    this._dragState = null; // { layerId, startX, startY, startLayerX, startLayerY }
+    this._resizeState = null; // { handle, startX, startY, startW, startH, startLayerX, startLayerY }
+    this._editingText = null; // { layerId, el }
     injectAnimCSS();
+    this._wireCanvasDrag();
   }
 
   /* ── State ────────────────────────────────────────────── */
@@ -315,7 +340,7 @@ export class CanvasEngine {
   setState(state) {
     const prevFormatId = this._state.formatId;
     this._state = structuredClone(state);
-    this._selectedId = null;
+    this._selectedIds.clear();
     this.render();
     if (this._state.formatId !== prevFormatId) {
       this._emit("formatChange", this._state.formatId);
@@ -351,13 +376,78 @@ export class CanvasEngine {
     const idx = this._state.layers.findIndex((l) => l.id === id);
     if (idx === -1) return;
     this._state.layers.splice(idx, 1);
-    if (this._selectedId === id) {
-      this._selectedId = null;
-      this._emit("selectionChange", null);
+    if (this._selectedIds.has(id)) {
+      this._selectedIds.delete(id);
     }
     this.render();
     this._emit("layersChange", this._state.layers);
     this._emit("stateChange", this._state);
+    if (this._selectedIds.size === 0) this._emit("selectionChange", null);
+    else this._emit("selectionChange", this.getSelectedLayers());
+  }
+
+  groupSelectedLayers() {
+    const ids = [...this._selectedIds];
+    if (ids.length < 2) return null;
+    const layers = this._state.layers.filter(l => ids.includes(l.id));
+    const minX = Math.min(...layers.map(l => l.x ?? 0));
+    const minY = Math.min(...layers.map(l => l.y ?? 0));
+    const maxX = Math.max(...layers.map(l => (l.x ?? 0) + (l.width === "auto" ? 0 : (l.width ?? 0))));
+    const maxY = Math.max(...layers.map(l => (l.y ?? 0) + (l.height === "auto" ? 0 : (l.height ?? 0))));
+    this.snapshot();
+    const groupId = crypto.randomUUID();
+    const group = {
+      id: groupId,
+      name: "Grupo",
+      type: "group",
+      visible: true,
+      locked: false,
+      collapsed: false,
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+      children: layers.map(l => ({ ...l })),
+      ...ANIM_DEFAULTS,
+    };
+    this._state.layers = this._state.layers.filter(l => !ids.includes(l.id));
+    this._state.layers.push(group);
+    this._selectedIds.clear();
+    this._selectedIds.add(groupId);
+    this.render();
+    this._emit("layersChange", this._state.layers);
+    this._emit("stateChange", this._state);
+    return group;
+  }
+
+  ungroupLayer(groupId) {
+    const group = this._state.layers.find(l => l.id === groupId);
+    if (!group || group.type !== "group") return;
+    this.snapshot();
+    const children = group.children ?? [];
+    this._state.layers = this._state.layers.filter(l => l.id !== groupId);
+    children.forEach(child => {
+      const restored = { ...child, id: crypto.randomUUID() };
+      this._state.layers.push(restored);
+    });
+    this._selectedIds.clear();
+    children.forEach(c => this._selectedIds.add(c.id));
+    this.render();
+    this._emit("layersChange", this._state.layers);
+    this._emit("stateChange", this._state);
+  }
+
+  removeSelectedLayers() {
+    const ids = [...this._selectedIds];
+    ids.forEach(id => {
+      const idx = this._state.layers.findIndex((l) => l.id === id);
+      if (idx !== -1) this._state.layers.splice(idx, 1);
+    });
+    this._selectedIds.clear();
+    this.render();
+    this._emit("layersChange", this._state.layers);
+    this._emit("stateChange", this._state);
+    this._emit("selectionChange", null);
   }
 
   moveLayer(id, direction) {
@@ -370,6 +460,88 @@ export class CanvasEngine {
     this.render();
     this._emit("layersChange", layers);
     this._emit("stateChange", this._state);
+  }
+
+  moveLayerByIndex(fromIdx, toIdx) {
+    const layers = this._state.layers;
+    if (fromIdx < 0 || fromIdx >= layers.length) return;
+    if (toIdx < 0 || toIdx >= layers.length) return;
+    const [moved] = layers.splice(fromIdx, 1);
+    layers.splice(toIdx, 0, moved);
+    this.render();
+    this._emit("layersChange", layers);
+    this._emit("stateChange", this._state);
+  }
+
+  alignSelectedLayers(direction) {
+    const layers = this.getSelectedLayers();
+    if (layers.length < 1) return;
+    const fmt = getFormat(this._state.formatId);
+    const cw = fmt.width, ch = fmt.height;
+    if (direction === "left") {
+      const minX = Math.min(...layers.map(l => l.x ?? 0));
+      layers.forEach(l => this.updateLayer(l.id, { x: minX }));
+    } else if (direction === "centerH") {
+      const avgX = layers.reduce((sum, l) => sum + (l.x ?? 0), 0) / layers.length;
+      layers.forEach(l => this.updateLayer(l.id, { x: avgX }));
+    } else if (direction === "right") {
+      const maxX = Math.max(...layers.map(l => {
+        const w = l.width ?? (l.type === "icon" ? l.size : 20);
+        return (l.x ?? 0) + w;
+      }));
+      layers.forEach(l => {
+        const w = l.width ?? (l.type === "icon" ? l.size : 20);
+        this.updateLayer(l.id, { x: maxX - w });
+      });
+    } else if (direction === "top") {
+      const minY = Math.min(...layers.map(l => l.y ?? 0));
+      layers.forEach(l => this.updateLayer(l.id, { y: minY }));
+    } else if (direction === "centerV") {
+      const avgY = layers.reduce((sum, l) => sum + (l.y ?? 0), 0) / layers.length;
+      layers.forEach(l => this.updateLayer(l.id, { y: avgY }));
+    } else if (direction === "bottom") {
+      const maxY = Math.max(...layers.map(l => {
+        const h = l.height ?? (l.type === "icon" ? l.size : 10);
+        return (l.y ?? 0) + h;
+      }));
+      layers.forEach(l => {
+        const h = l.height ?? (l.type === "icon" ? l.size : 10);
+        this.updateLayer(l.id, { y: maxY - h });
+      });
+    }
+  }
+
+  distributeSelectedLayers(direction) {
+    const layers = this.getSelectedLayers();
+    if (layers.length < 3) return;
+    const sorted = [...layers].sort((a, b) => (a.x ?? 0) - (b.x ?? 0));
+    if (direction === "horizontal") {
+      const minX = sorted[0].x ?? 0;
+      const maxX = sorted[sorted.length - 1].x ?? 0;
+      const totalW = sorted.reduce((sum, l) => sum + (l.width ?? 10), 0);
+      const space = (maxX - minX - totalW) / (sorted.length - 1);
+      let curX = minX;
+      sorted.forEach((l, i) => {
+        if (i === 0) { curX = l.x ?? 0; return; }
+        if (i === sorted.length - 1) return;
+        curX += (l.width ?? 10) + space;
+        this.updateLayer(l.id, { x: curX });
+        curX += space;
+      });
+    } else if (direction === "vertical") {
+      const minY = sorted[0].y ?? 0;
+      const maxY = sorted[sorted.length - 1].y ?? 0;
+      const totalH = sorted.reduce((sum, l) => sum + (l.height ?? 10), 0);
+      const space = (maxY - minY - totalH) / (sorted.length - 1);
+      let curY = minY;
+      sorted.forEach((l, i) => {
+        if (i === 0) { curY = l.y ?? 0; return; }
+        if (i === sorted.length - 1) return;
+        curY += (l.height ?? 10) + space;
+        this.updateLayer(l.id, { y: curY });
+        curY += space;
+      });
+    }
   }
 
   duplicateLayer(id) {
@@ -387,17 +559,52 @@ export class CanvasEngine {
     this._emit("stateChange", this._state);
   }
 
-  selectLayer(id) {
-    this._selectedId = id;
+  selectLayer(id, { addToSelection = false } = {}) {
+    if (addToSelection) {
+      if (this._selectedIds.has(id)) {
+        this._selectedIds.delete(id);
+      } else {
+        this._selectedIds.add(id);
+      }
+    } else {
+      this._selectedIds.clear();
+      if (id) this._selectedIds.add(id);
+    }
     this._el.querySelectorAll(".pg-layer").forEach((el) => {
-      el.classList.toggle("pg-layer--selected", el.dataset.layerId === id);
+      el.classList.toggle("pg-layer--selected", this._selectedIds.has(el.dataset.layerId));
     });
-    const layer = this._state.layers.find((l) => l.id === id) ?? null;
-    this._emit("selectionChange", layer);
+    const layers = this._state.layers.filter((l) => this._selectedIds.has(l.id));
+    this._emit("selectionChange", layers.length === 1 ? layers[0] : layers.length > 1 ? layers : null);
+  }
+
+  getSelectedLayers() {
+    return this._state.layers.filter((l) => this._selectedIds.has(l.id));
   }
 
   getSelectedLayer() {
-    return this._state.layers.find((l) => l.id === this._selectedId) ?? null;
+    if (this._selectedIds.size === 0) return null;
+    if (this._selectedIds.size === 1) {
+      const id = [...this._selectedIds][0];
+      return this._state.layers.find((l) => l.id === id) ?? null;
+    }
+    return this.getSelectedLayers();
+  }
+
+  clearSelection() {
+    this._selectedIds.clear();
+    this._el.querySelectorAll(".pg-layer").forEach((el) => {
+      el.classList.remove("pg-layer--selected");
+    });
+    this._emit("selectionChange", null);
+  }
+
+  selectAllLayers() {
+    this._state.layers.forEach(l => this._selectedIds.add(l.id));
+    this._el.querySelectorAll(".pg-layer").forEach((el) => {
+      el.classList.add("pg-layer--selected");
+    });
+    const layers = this.getSelectedLayers();
+    this._emit("selectionChange", layers);
   }
 
   setFormat(formatId) {
@@ -456,6 +663,185 @@ export class CanvasEngine {
     return { w: this._previewW, h: this._previewH };
   }
 
+  _renderSafeAreaGuides(show = false) {
+    this._el.querySelectorAll(".pg-safe-area").forEach(el => el.remove());
+    if (!show) return;
+    const fmt = getFormat(this._state.formatId);
+    const cw = fmt.width, ch = fmt.height;
+    const overlay = document.createElement("div");
+    overlay.className = "pg-safe-area";
+    overlay.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden;`;
+    const zones = [
+      { top: 0, height: ch * 0.14, label: "Stories safe zone" },
+      { top: ch * 0.86, height: ch * 0.14, label: "" },
+    ];
+    zones.forEach(z => {
+      const d = document.createElement("div");
+      d.style.cssText = `position:absolute;top:${z.top}px;left:0;right:0;height:${z.height}px;border:1px dashed rgba(255,100,100,0.5);background:rgba(255,0,0,0.03);`;
+      overlay.appendChild(d);
+    });
+    this._el.appendChild(overlay);
+  }
+
+  toggleSafeArea() {
+    this._safeAreaVisible = !this._safeAreaVisible;
+    this._renderSafeAreaGuides(this._safeAreaVisible);
+    return this._safeAreaVisible;
+  }
+
+  /* ── Drag & Resize ───────────────────────────────────── */
+  _wireCanvasDrag() {
+    const onMouseMove = (e) => {
+      if (this._editingText) return;
+      const rect = this._el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const cw = getFormat(this._state.formatId).width;
+      const ch = getFormat(this._state.formatId).height;
+      const scaleX = cw / (this._previewW || cw);
+      const scaleY = ch / (this._previewH || ch);
+
+      if (this._dragState) {
+        const dx = (mx - this._dragState.startX) * scaleX;
+        const dy = (my - this._dragState.startY) * scaleY;
+        const newX = this._dragState.startLayerX + (dx / cw) * 100;
+        const newY = this._dragState.startLayerY + (dy / ch) * 100;
+        this.updateLayer(this._dragState.layerId, { x: newX, y: newY });
+      } else if (this._resizeState) {
+        const { handle, startX, startY, startW, startH, startLayerX, startLayerY, layer } = this._resizeState;
+        const dx = (mx - startX) * scaleX;
+        const dy = (my - startY) * scaleY;
+        const dwPct = (dx / cw) * 100;
+        const dhPct = (dy / ch) * 100;
+        let newX = startLayerX, newY = startLayerY, newW = startW, newH = startH;
+        const lockRatio = layer._lockRatio ?? false;
+        const ratio = startW / (startH || 1);
+
+        if (handle.includes("w")) { newX = startLayerX + dwPct; newW = Math.max(1, startW - dwPct); }
+        if (handle.includes("e")) { newW = Math.max(1, startW + dwPct); }
+        if (handle.includes("n")) { newY = startLayerY + dhPct; newH = Math.max(1, startH - dhPct); }
+        if (handle.includes("s")) { newH = Math.max(1, startH + dhPct); }
+
+        if (lockRatio) {
+          if (handle === "e" || handle === "w") newH = newW / ratio;
+          else if (handle === "n" || handle === "s") newW = newH * ratio;
+          else { newH = newW / ratio; }
+        }
+
+        this.updateLayer(this._resizeState.layerId, { x: newX, y: newY, width: newW, height: newH });
+      }
+    };
+
+    const onMouseUp = () => {
+      if (this._dragState) {
+        this._dragState = null;
+      }
+      if (this._resizeState) {
+        this._resizeState = null;
+        this._renderResizeHandles();
+      }
+    };
+
+    this._el.addEventListener("mousemove", onMouseMove);
+    this._el.addEventListener("mouseup", onMouseUp);
+    this._el.addEventListener("mouseleave", onMouseUp);
+  }
+
+  _startDrag(layer, e) {
+    if (layer.locked) return;
+    e.stopPropagation();
+    const rect = this._el.getBoundingClientRect();
+    const cw = getFormat(this._state.formatId).width;
+    const ch = getFormat(this._state.formatId).height;
+    this._dragState = {
+      layerId: layer.id,
+      startX: e.clientX - rect.left,
+      startY: e.clientY - rect.top,
+      startLayerX: layer.x ?? 0,
+      startLayerY: layer.y ?? 0,
+    };
+  }
+
+  _startResize(handle, layer, e) {
+    if (layer.locked) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const rect = this._el.getBoundingClientRect();
+    this._resizeState = {
+      handle,
+      layerId: layer.id,
+      startX: e.clientX - rect.left,
+      startY: e.clientY - rect.top,
+      startW: layer.width ?? 10,
+      startH: layer.height ?? (layer.type === "image" ? 40 : 10),
+      startLayerX: layer.x ?? 0,
+      startLayerY: layer.y ?? 0,
+      layer,
+    };
+    this._renderResizeHandles();
+  }
+
+  _renderResizeHandles() {
+    this._el.querySelectorAll(".pg-resize-handle").forEach(el => el.remove());
+    if (this._selectedIds.size !== 1) return;
+    const layerId = [...this._selectedIds][0];
+    const layer = this._state.layers.find(l => l.id === layerId);
+    if (!layer || layer.locked) return;
+    if (layer.type === "text" && layer.width === "auto") return;
+    const fmt = getFormat(this._state.formatId);
+    const cw = fmt.width, ch = fmt.height;
+    const x = ((layer.x ?? 0) * cw) / 100;
+    const y = ((layer.y ?? 0) * ch) / 100;
+    const w = ((layer.width ?? (layer.type === "icon" ? layer.size : 20)) * cw) / 100;
+    const h = ((layer.height ?? (layer.type === "icon" ? layer.size : 10)) * ch) / 100;
+    const handleSize = 8;
+    const positions = [
+      { h: "nw", x: x - handleSize / 2, y: y - handleSize / 2, cur: "nwse-resize" },
+      { h: "n", x: x + w / 2 - handleSize / 2, y: y - handleSize / 2, cur: "ns-resize" },
+      { h: "ne", x: x + w - handleSize / 2, y: y - handleSize / 2, cur: "nesw-resize" },
+      { h: "e", x: x + w - handleSize / 2, y: y + h / 2 - handleSize / 2, cur: "ew-resize" },
+      { h: "se", x: x + w - handleSize / 2, y: y + h - handleSize / 2, cur: "nwse-resize" },
+      { h: "s", x: x + w / 2 - handleSize / 2, y: y + h - handleSize / 2, cur: "ns-resize" },
+      { h: "sw", x: x - handleSize / 2, y: y + h - handleSize / 2, cur: "nesw-resize" },
+      { h: "w", x: x - handleSize / 2, y: y + h / 2 - handleSize / 2, cur: "ew-resize" },
+    ];
+    positions.forEach(pos => {
+      const handle = document.createElement("div");
+      handle.className = "pg-resize-handle";
+      handle.dataset.handle = pos.h;
+      handle.style.cssText = `position:absolute;width:${handleSize}px;height:${handleSize}px;background:#7bc4ec;border:1px solid #fff;border-radius:2px;cursor:${pos.cur};z-index:10;`;
+      handle.style.left = pos.x + "px";
+      handle.style.top = pos.y + "px";
+      handle.addEventListener("mousedown", (e) => this._startResize(pos.h, layer, e));
+      this._el.appendChild(handle);
+    });
+  }
+
+  _startTextEdit(layer, el) {
+    if (layer.locked || layer.type !== "text") return;
+    this._editingText = { layerId: layer.id, el };
+    el.contentEditable = "true";
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    const finish = () => {
+      if (!this._editingText) return;
+      const newContent = el.textContent;
+      el.contentEditable = "false";
+      this._editingText = null;
+      this.snapshot();
+      this.updateLayer(layer.id, { content: newContent });
+    };
+    el.addEventListener("blur", finish, { once: true });
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); el.blur(); }
+      if (e.key === "Escape") { el.textContent = layer.content; el.blur(); }
+    });
+  }
+
   /* ── Render ───────────────────────────────────────────── */
   render() {
     const fmt = getFormat(this._state.formatId);
@@ -463,6 +849,7 @@ export class CanvasEngine {
     this._el.style.height = fmt.height + "px";
 
     this._el.querySelectorAll(".pg-layer").forEach((el) => el.remove());
+    this._el.querySelectorAll(".pg-resize-handle").forEach(el => el.remove());
     this._renderBackground();
 
     this._state.layers.forEach((layer) => {
@@ -470,6 +857,8 @@ export class CanvasEngine {
       const el = this._buildLayerEl(layer, fmt.width, fmt.height);
       this._el.appendChild(el);
     });
+
+    this._renderResizeHandles();
   }
 
   _renderBackground() {
@@ -516,6 +905,7 @@ export class CanvasEngine {
     const newEl = this._buildLayerEl(layer, fmt.width, fmt.height);
     if (existing) existing.replaceWith(newEl);
     else this._el.appendChild(newEl);
+    this._renderResizeHandles();
   }
 
   _buildLayerEl(layer, cw, ch) {
@@ -523,6 +913,7 @@ export class CanvasEngine {
     el.className = "pg-layer";
     el.dataset.layerId = layer.id;
     el.dataset.anim = layer.animIn ?? "none";
+    el.dataset.animOut = layer.animOut ?? "none";
 
     const x = ((layer.x ?? 0) * cw) / 100;
     const y = ((layer.y ?? 0) * ch) / 100;
@@ -547,13 +938,49 @@ export class CanvasEngine {
     else if (layer.type === "image") this._applyImageStyles(el, layer, cw, ch);
     else if (layer.type === "icon") this._applyIconStyles(el, layer, cw, ch);
     else if (layer.type === "shape") this._applyShapeStyles(el, layer, cw, ch);
+    else if (layer.type === "group") {
+      el.style.border = "1px dashed rgba(255,255,255,0.2)";
+      el.style.borderRadius = "4px";
+      el.style.background = "rgba(255,255,255,0.03)";
+      el.style.display = "flex";
+      el.style.flexDirection = "column";
+      el.style.gap = "2px";
+      el.style.padding = "4px";
+      if (layer.collapsed) {
+        el.style.minHeight = "24px";
+      } else {
+        const children = layer.children ?? [];
+        children.forEach(child => {
+          const childEl = this._buildLayerEl(child, cw, ch);
+          childEl.style.position = "relative";
+          childEl.style.left = "0";
+          childEl.style.top = "0";
+          childEl.style.transform = `translate(${(child.x - layer.x) * cw / 100}px, ${(child.y - layer.y) * ch / 100}px)`;
+          el.appendChild(childEl);
+        });
+      }
+    }
 
-    if (layer.id === this._selectedId) el.classList.add("pg-layer--selected");
+    if (this._selectedIds.has(layer.id)) el.classList.add("pg-layer--selected");
 
     el.addEventListener("click", (e) => {
       e.stopPropagation();
-      this.selectLayer(layer.id);
+      this.selectLayer(layer.id, { addToSelection: e.ctrlKey || e.metaKey });
     });
+
+    el.addEventListener("mousedown", (e) => {
+      if (layer.locked) return;
+      if (e.button !== 0) return;
+      this._startDrag(layer, e);
+    });
+
+    if (layer.type === "text") {
+      el.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        const textEl = el.querySelector("span") || el;
+        this._startTextEdit(layer, textEl);
+      });
+    }
 
     return el;
   }
@@ -608,6 +1035,17 @@ export class CanvasEngine {
         el.style.padding = `${py}px ${px}px`;
       }
 
+      // Shadow / blur effects
+      if (layer.textShadow) {
+        const s = layer.textShadow;
+        const blurPx = ((s.blur ?? 4) * cw) / 1080;
+        el.style.textShadow = `${((s.x ?? 2) * cw) / 1080}px ${((s.y ?? 2) * cw) / 1080}px ${blurPx}px ${s.color ?? "rgba(0,0,0,0.5)"}`;
+      }
+      if (layer.layerBlur > 0) {
+        const blurPx = ((layer.layerBlur ?? 0) * cw) / 1080;
+        el.style.filter = `blur(${blurPx}px)`;
+      }
+
       el.textContent = layer.content;
     }
   }
@@ -620,6 +1058,17 @@ export class CanvasEngine {
     if (layer.hasBorder) {
       const bw = ((layer.borderWidth ?? 2) * cw) / 1080;
       el.style.border = `${bw}px solid ${layer.borderColor ?? "rgba(255,255,255,0.28)"}`;
+    }
+    // Shadow
+    if (layer.boxShadow) {
+      const s = layer.boxShadow;
+      const blurPx = ((s.blur ?? 8) * cw) / 1080;
+      const spreadPx = ((s.spread ?? 0) * cw) / 1080;
+      el.style.boxShadow = `${((s.x ?? 2) * cw) / 1080}px ${((s.y ?? 4) * cw) / 1080}px ${blurPx}px ${spreadPx}px ${s.color ?? "rgba(0,0,0,0.4)"}`;
+    }
+    if (layer.layerBlur > 0) {
+      const blurPx = ((layer.layerBlur ?? 0) * cw) / 1080;
+      el.style.filter = `blur(${blurPx}px)`;
     }
     if (layer.src) {
       const img = document.createElement("img");
@@ -666,6 +1115,16 @@ export class CanvasEngine {
     el.style.borderRadius = `${layer.borderRadius ?? 0}px`;
     if (layer.strokeWidth > 0) {
       el.style.outline = `${layer.strokeWidth}px solid ${layer.strokeColor}`;
+    }
+    if (layer.boxShadow) {
+      const s = layer.boxShadow;
+      const blurPx = ((s.blur ?? 8) * cw) / 1080;
+      const spreadPx = ((s.spread ?? 0) * cw) / 1080;
+      el.style.boxShadow = `${((s.x ?? 2) * cw) / 1080}px ${((s.y ?? 4) * cw) / 1080}px ${blurPx}px ${spreadPx}px ${s.color ?? "rgba(0,0,0,0.4)"}`;
+    }
+    if (layer.layerBlur > 0) {
+      const blurPx = ((layer.layerBlur ?? 0) * cw) / 1080;
+      el.style.filter = `blur(${blurPx}px)`;
     }
   }
 
@@ -800,7 +1259,7 @@ export class CanvasEngine {
     if (this._historyIdx <= 0) return;
     this._historyIdx--;
     this._state = structuredClone(this._history[this._historyIdx]);
-    this._selectedId = null;
+    this._selectedIds.clear();
     this.render();
     this._emit("stateChange", this._state);
     this._emit("layersChange", this._state.layers);
@@ -811,11 +1270,12 @@ export class CanvasEngine {
     if (this._historyIdx >= this._history.length - 1) return;
     this._historyIdx++;
     this._state = structuredClone(this._history[this._historyIdx]);
-    this._selectedId = null;
+    this._selectedIds.clear();
     this.render();
     this._emit("stateChange", this._state);
     this._emit("layersChange", this._state.layers);
     this._emit("selectionChange", null);
+  }
   }
 
   canUndo() {

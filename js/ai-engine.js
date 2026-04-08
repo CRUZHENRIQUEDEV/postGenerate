@@ -1,4 +1,16 @@
 export class AIEngine {
+  async validateApiKey({ provider, model, endpoint, apiKey }) {
+    if (!apiKey) return { valid: false, error: "API key não informada." };
+    try {
+      const req = this._buildRequest({ provider, model, endpoint, apiKey, finalPrompt: "Hi", temperature: 0.5 });
+      const { data } = await this._requestWithFallback(req);
+      this._assertProviderSuccess(data);
+      return { valid: true };
+    } catch (e) {
+      return { valid: false, error: e.message || "Falha na validação." };
+    }
+  }
+
   async chatWithTools({
     provider,
     model,

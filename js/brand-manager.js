@@ -403,6 +403,93 @@ export class BrandManager {
       .toLowerCase();
   }
 
+  _hexToRgb(hex) {
+    const clean = (hex ?? "").replace("#", "");
+    if (clean.length < 6) return null;
+    return {
+      r: parseInt(clean.slice(0, 2), 16),
+      g: parseInt(clean.slice(2, 4), 16),
+      b: parseInt(clean.slice(4, 6), 16),
+    };
+  }
+
+  _rgbToHex(r, g, b) {
+    return "#" + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+  }
+
+  _hslToRgb(h, s, l) {
+    const hsl = [h / 360, s / 100, l / 100];
+    if (hsl[1] === 0) {
+      const v = Math.round(hsl[2] * 255);
+      return [v, v, v];
+    }
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    const q = hsl[2] < 0.5 ? hsl[2] * (1 + hsl[1]) : hsl[2] + hsl[1] - hsl[2] * hsl[1];
+    const p = 2 * hsl[2] - q;
+    return [
+      Math.round(hue2rgb(p, q, hsl[0] + 1 / 3) * 255),
+      Math.round(hue2rgb(p, q, hsl[0]) * 255),
+      Math.round(hue2rgb(p, q, hsl[0] - 1 / 3) * 255),
+    ];
+  }
+
+  generateTones(baseHex, levels = [0.8, 0.6, 0.4, 0.2]) {
+    const rgb = this._hexToRgb(baseHex);
+    if (!rgb) return [];
+    const r1 = rgb.r / 255, g1 = rgb.g / 255, b1 = rgb.b / 255;
+    const max = Math.max(r1, g1, b1), min = Math.min(r1, g1, b1);
+    let h, s, l = (max + min) / 2;
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r1: h = ((g1 - b1) / d + (g1 < b1 ? 6 : 0)) / 6; break;
+        case g1: h = ((b1 - r1) / d + 2) / 6; break;
+        default: h = ((r1 - g1) / d + 4) / 6;
+      }
+    }
+    const h360 = h * 360, s100 = s * 100, l100 = l * 100;
+    return levels.map(t => {
+      const lighter = Math.min(100, l100 + t * (100 - l100));
+      const [r, g, b] = this._hslToRgb(h360, s100, lighter);
+      return this._rgbToHex(r, g, b);
+    });
+  }
+
+  generateShades(baseHex, levels = [0.8, 0.6, 0.4, 0.2]) {
+    const rgb = this._hexToRgb(baseHex);
+    if (!rgb) return [];
+    const r1 = rgb.r / 255, g1 = rgb.g / 255, b1 = rgb.b / 255;
+    const max = Math.max(r1, g1, b1), min = Math.min(r1, g1, b1);
+    let h, s, l = (max + min) / 2;
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r1: h = ((g1 - b1) / d + (g1 < b1 ? 6 : 0)) / 6; break;
+        case g1: h = ((b1 - r1) / d + 2) / 6; break;
+        default: h = ((r1 - g1) / d + 4) / 6;
+      }
+    }
+    const h360 = h * 360, s100 = s * 100, l100 = l * 100;
+    return levels.map(t => {
+      const darker = Math.max(0, l100 - t * l100);
+      const [r, g, b] = this._hslToRgb(h360, s100, darker);
+      return this._rgbToHex(r, g, b);
+    });
+  }
+
   _downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

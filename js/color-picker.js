@@ -16,7 +16,26 @@ export class ColorPicker {
     this._draggingAlpha = false
     this._el = null
     this._onChangeCb = null
+    this._recentColors = this._loadRecentColors()
     this._build()
+  }
+
+  _loadRecentColors() {
+    try {
+      return JSON.parse(localStorage.getItem('pg_recent_colors') || '[]')
+    } catch { return [] }
+  }
+
+  _saveRecentColors() {
+    localStorage.setItem('pg_recent_colors', JSON.stringify(this._recentColors.slice(0, 8)));
+  }
+
+  _addRecentColor(hex) {
+    this._recentColors = this._recentColors.filter(c => c !== hex)
+    this._recentColors.unshift(hex)
+    this._recentColors = this._recentColors.slice(0, 8)
+    this._saveRecentColors()
+    this._renderRecentSwatches()
   }
 
   /* ── Public API ─────────────────────────────────────────── */
@@ -27,6 +46,7 @@ export class ColorPicker {
     this._setFromHex(initialHex)
     this._originalHex = initialHex
     this._updateAll()
+    this._renderRecentSwatches()
     this._el.style.display = 'flex'
     document.body.style.overflow = 'hidden'
     return new Promise(resolve => { this._resolve = resolve })
@@ -79,12 +99,25 @@ export class ColorPicker {
           background: #141928;
         ">
           <span style="font-size: 13px; font-weight: 500; color: #e8edf5; font-family: var(--font-ui);">Selecionar Cor</span>
-          <button id="cp-close" style="
-            background: none; border: none; color: #5a6880; font-size: 18px;
-            cursor: pointer; width: 24px; height: 24px;
-            display: flex; align-items: center; justify-content: center;
-            border-radius: 4px; font-family: var(--font-ui);
-          ">×</button>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div id="cp-wcag-badge" title="Razão de contraste WCAG" style="
+              font-size: 10px; font-weight: 600; font-family: var(--font-ui);
+              padding: 2px 6px; border-radius: 4px; cursor: default;
+              display: none;
+            "></div>
+            <button id="cp-eyedropper" title="Usar conta-gotas (EyeDropper API)" style="
+              background: none; border: 1px solid rgba(255,255,255,0.1); color: #8896b0; font-size: 14px;
+              cursor: pointer; width: 28px; height: 28px;
+              display: flex; align-items: center; justify-content: center;
+              border-radius: 4px; font-family: var(--font-ui);
+            ">💧</button>
+            <button id="cp-close" style="
+              background: none; border: none; color: #5a6880; font-size: 18px;
+              cursor: pointer; width: 24px; height: 24px;
+              display: flex; align-items: center; justify-content: center;
+              border-radius: 4px; font-family: var(--font-ui);
+            ">×</button>
+          </div>
         </div>
 
         <!-- Body -->
@@ -225,6 +258,12 @@ export class ColorPicker {
             <span id="cp-color-name" style="font-size: 11px; color: #8896b0; font-family: var(--font-ui); flex: 1;"></span>
           </div>
 
+          <!-- Recent colors -->
+          <div>
+            <div style="font-size: 10px; color: #5a6880; margin-bottom: 6px; font-family: var(--font-ui); text-transform: uppercase; letter-spacing: 0.06em;">Recentes</div>
+            <div id="cp-recent-swatches" style="display: flex; flex-wrap: wrap; gap: 4px;"></div>
+          </div>
+
           <!-- Saved colors quick-access -->
           <div>
             <div style="font-size: 10px; color: #5a6880; margin-bottom: 6px; font-family: var(--font-ui); text-transform: uppercase; letter-spacing: 0.06em;">Cores salvas</div>
@@ -282,7 +321,11 @@ export class ColorPicker {
       this._updateAll()
       this.close(null)
     })
-    el.querySelector('#cp-ok').addEventListener('click', () => this.close(this._hexValue()))
+    el.querySelector('#cp-ok').addEventListener('click', () => {
+      const hex = this._hexValue()
+      this._addRecentColor(hex)
+      this.close(hex)
+    })
 
     /* click outside */
     el.addEventListener('click', (e) => {
@@ -352,6 +395,23 @@ export class ColorPicker {
       if (!this._savedColors.includes(hex)) {
         this._savedColors.push(hex)
         this._renderSavedSwatches()
+      }
+    })
+
+    /* EyeDropper API */
+    el.querySelector('#cp-eyedropper')?.addEventListener('click', async () => {
+      if (!window.EyeDropper) {
+        alert('EyeDropper API não disponível neste navegador.')
+        return
+      }
+      try {
+        const picker = new window.EyeDropper()
+        const result = await picker.open()
+        const hex = result.sRGBHex
+        this._setFromHex(hex)
+        this._updateAll()
+      } catch (e) {
+        // User cancelled or error
       }
     })
   }
@@ -506,6 +566,56 @@ export class ColorPicker {
     this._drawAlphaBar()
 
     if (this._onChangeCb) this._onChangeCb(rgba)
+    this._updateWcagBadge(hex)
+  }
+
+  _luminance(r, g, b) {
+    const [rs, gs, bs] = [r, g, b].map(v => {
+      const c = v / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+  }
+
+  _wcagRatio(hex1, hex2) {
+    const parse = h => {
+      const clean = h.replace('#', '');
+      return [
+        parseInt(clean.slice(0, 2), 16),
+        parseInt(clean.slice(2, 4), 16),
+        parseInt(clean.slice(4, 6), 16),
+      ];
+    };
+    const [r1, g1, b1] = parse(hex1);
+    const [r2, g2, b2] = parse(hex2);
+    const l1 = this._luminance(r1, g1, b1);
+    const l2 = this._luminance(r2, g2, b2);
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  _updateWcagBadge(currentHex) {
+    const badge = this._el?.querySelector('#cp-wcag-badge');
+    if (!badge) return;
+    const ratio = this._wcagRatio(currentHex, '#ffffff');
+    const ratioDark = this._wcagRatio(currentHex, '#000000');
+    const best = Math.max(ratio, ratioDark);
+    const aa = best >= 4.5;
+    const aaa = best >= 7;
+    const text = best.toFixed(1);
+    badge.textContent = `${text}:1`;
+    badge.style.display = 'inline-block';
+    if (aaa) {
+      badge.style.background = '#1a7f37';
+      badge.style.color = '#fff';
+    } else if (aa) {
+      badge.style.background = '#c78c1a';
+      badge.style.color = '#fff';
+    } else {
+      badge.style.background = '#c42b2b';
+      badge.style.color = '#fff';
+    }
   }
 
   _updateSLThumb(x, y) {
@@ -523,6 +633,28 @@ export class ColorPicker {
       s.style.cssText = `
         width: 20px; height: 20px; border-radius: 4px;
         background: ${hex}; border: 1px solid rgba(255,255,255,0.1);
+        cursor: pointer; flex-shrink: 0;
+      `
+      s.title = hex
+      s.addEventListener('click', () => {
+        this._setFromHex(hex)
+        this._drawSLCanvas()
+        this._drawAlphaBar()
+        this._updateAll()
+      })
+      container.appendChild(s)
+    })
+  }
+
+  _renderRecentSwatches() {
+    const container = this._el.querySelector('#cp-recent-swatches')
+    if (!container) return
+    container.innerHTML = ''
+    ;(this._recentColors || []).forEach(hex => {
+      const s = document.createElement('div')
+      s.style.cssText = `
+        width: 20px; height: 20px; border-radius: 4px;
+        background: ${hex}; border: 1px solid rgba(255,255,255,0.15);
         cursor: pointer; flex-shrink: 0;
       `
       s.title = hex

@@ -101,6 +101,7 @@ class App {
       bound: false,
     };
     this._canvasPreviewZoom = 1;
+    this._styleClipboard = null;
   }
 
   /* ── Boot ─────────────────────────────────────────────── */
@@ -146,6 +147,8 @@ class App {
     this._wireSlideCaption();
     this._wirePanelVisibilityControls();
     this._wireShareModal();
+    this._wireShortcutsModal();
+    this._wireTheme();
     this._wireAIModal();
     this._wireRealtimeCollab();
     await this.slides.init();
@@ -284,6 +287,7 @@ class App {
         (layer.id === selected?.id ? " selected" : "") +
         (layer.visible ? "" : " hidden");
       item.dataset.layerId = layer.id;
+      item.draggable = true;
 
       const typeIcon =
         layer.type === "text"
@@ -292,12 +296,14 @@ class App {
             ? "🖼"
             : layer.type === "icon"
               ? "⬢"
-              : "▭";
+              : layer.type === "group"
+                ? "📁"
+                : "▭";
 
       item.innerHTML = `
         <span class="layer-item-drag" title="Reordenar">⠿</span>
         <span class="layer-item-type-icon">${typeIcon}</span>
-        <span class="layer-item-name">${layer.name}</span>
+        <span class="layer-item-name" data-layer-id="${layer.id}">${layer.name}</span>
         <span class="layer-item-actions">
           <button class="layer-vis-btn" title="${layer.visible ? "Ocultar" : "Mostrar"}">${layer.visible ? "👁" : "◌"}</button>
           <button class="layer-lock-btn" title="${layer.locked ? "Desbloquear" : "Bloquear"}">${layer.locked ? "🔒" : "🔓"}</button>
@@ -307,7 +313,32 @@ class App {
       item.addEventListener("click", (e) => {
         if (e.target.classList.contains("layer-vis-btn")) return;
         if (e.target.classList.contains("layer-lock-btn")) return;
-        this.canvas.selectLayer(layer.id);
+        if (e.target.classList.contains("layer-item-name")) return;
+        this.canvas.selectLayer(layer.id, { addToSelection: e.ctrlKey || e.metaKey });
+      });
+
+      const nameEl = item.querySelector(".layer-item-name");
+      nameEl.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "layer-name-input";
+        input.value = layer.name;
+        input.style.cssText = "background:transparent;border:1px solid var(--accent);border-radius:3px;padding:1px 4px;font-size:12px;width:calc(100% - 8px);color:var(--text);";
+        nameEl.replaceWith(input);
+        input.focus();
+        input.select();
+        const finish = () => {
+          const newName = input.value.trim() || layer.name;
+          this.canvas.snapshot();
+          this.canvas.updateLayer(layer.id, { name: newName });
+          this._refreshLayerList();
+        };
+        input.addEventListener("blur", finish);
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+          if (e.key === "Escape") { input.value = layer.name; input.blur(); }
+        });
       });
 
       item.querySelector(".layer-vis-btn").addEventListener("click", () => {
@@ -318,6 +349,48 @@ class App {
 
       item.querySelector(".layer-lock-btn").addEventListener("click", () => {
         this.canvas.updateLayer(layer.id, { locked: !layer.locked });
+        this._refreshLayerList();
+      });
+
+      if (layer.type === "group") {
+        const collapseBtn = document.createElement("button");
+        collapseBtn.className = "layer-collapse-btn";
+        collapseBtn.title = layer.collapsed ? "Expandir" : "Colapsar";
+        collapseBtn.textContent = layer.collapsed ? "▶" : "▼";
+        collapseBtn.style.cssText = "background:none;border:none;color:var(--text-muted);cursor:pointer;padding:0 2px;font-size:9px;";
+        collapseBtn.addEventListener("click", () => {
+          this.canvas.snapshot();
+          this.canvas.updateLayer(layer.id, { collapsed: !layer.collapsed });
+          this._refreshLayerList();
+        });
+        item.querySelector(".layer-item-actions").prepend(collapseBtn);
+      }
+
+      // Drag to reorder
+      item.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", layer.id);
+        item.classList.add("dragging");
+      });
+      item.addEventListener("dragend", () => item.classList.remove("dragging"));
+      item.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        item.classList.add("drag-over");
+      });
+      item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
+      item.addEventListener("drop", (e) => {
+        e.preventDefault();
+        item.classList.remove("drag-over");
+        const draggedId = e.dataTransfer.getData("text/plain");
+        const draggedItem = list.querySelector(`[data-layer-id="${draggedId}"]`);
+        const allItems = [...list.querySelectorAll(".layer-item:not(.dragging)")];
+        const targetIdx = allItems.indexOf(item);
+        if (!draggedItem || targetIdx === -1) return;
+        const allLayers = [...this.canvas.getLayers()].reverse();
+        const fromIdx = allLayers.findIndex(l => l.id === draggedId);
+        const toIdx = allLayers.length - 1 - targetIdx;
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+        this.canvas.snapshot();
+        this.canvas.moveLayerByIndex(fromIdx, toIdx);
         this._refreshLayerList();
       });
 
@@ -388,9 +461,20 @@ class App {
 
   _fillTextControls(layer) {
     this._setVal("prop-content", layer.content);
+    const counter = document.getElementById("prop-content-counter");
+    if (counter) {
+      if (layer.maxChars) {
+        counter.style.display = "block";
+        counter.textContent = `${(layer.content ?? "").length} / ${layer.maxChars}`;
+      } else {
+        counter.style.display = "none";
+      }
+    }
     this._setVal("prop-font-family", layer.fontFamily);
     this._setVal("prop-font-size", layer.fontSize);
     this._setVal("prop-font-weight", layer.fontWeight);
+    const weightSlider = panel.querySelector("#prop-font-weight-slider");
+    if (weightSlider) weightSlider.value = layer.fontWeight ?? 400;
     this._setVal("prop-line-height", layer.lineHeight);
     this._setVal("prop-letter-spacing", layer.letterSpacing);
     this._setVal("prop-opacity", Math.round((layer.opacity ?? 1) * 100));
@@ -426,6 +510,19 @@ class App {
       "prop-width",
       layer.width === "auto" ? "auto" : (layer.width?.toFixed(1) ?? "auto"),
     );
+    const ratioRow = document.getElementById("prop-ratio-lock-row");
+    if (ratioRow) {
+      const show = layer.type === "image" || layer.type === "shape";
+      ratioRow.style.display = show ? "flex" : "none";
+      const checkbox = document.getElementById("prop-ratio-lock");
+      if (checkbox) checkbox.checked = !!(layer._lockRatio);
+    }
+    this._setVal("prop-layer-blur", layer.layerBlur ?? 0);
+    const s = layer.boxShadow ?? { x: 2, y: 4, blur: 8, color: "rgba(0,0,0,0.4)" };
+    this._setVal("prop-shadow-x", s.x ?? 2);
+    this._setVal("prop-shadow-y", s.y ?? 4);
+    this._setVal("prop-shadow-blur", s.blur ?? 8);
+    this._setSwatch("prop-shadow-color-swatch", s.color ?? "rgba(0,0,0,0.4)");
   }
 
   _fillImageControls(layer) {
@@ -468,6 +565,9 @@ class App {
       "prop-anim-easing",
       layer.animEasing ?? "cubic-bezier(0.22,1,0.36,1)",
     );
+    this._setVal("prop-anim-out", layer.animOut ?? "none");
+    this._setVal("prop-anim-out-duration", layer.animOutDuration ?? 0.65);
+    this._setVal("prop-anim-out-delay", layer.animOutDelay ?? 0);
   }
 
   _wireBgControls() {
@@ -693,6 +793,10 @@ class App {
       const layer = this.canvas.getSelectedLayer();
       if (!layer) return;
       this.canvas.updateLayer(layer.id, { content: e.target.value });
+      const counter = document.getElementById("prop-content-counter");
+      if (counter && layer.maxChars) {
+        counter.textContent = `${e.target.value.length} / ${layer.maxChars}`;
+      }
     });
     panel
       .querySelector("#prop-content")
@@ -730,7 +834,24 @@ class App {
         this.canvas.updateLayer(layer.id, {
           fontWeight: parseInt(e.target.value),
         });
+        const slider = panel.querySelector("#prop-font-weight-slider");
+        if (slider) slider.value = e.target.value;
       });
+
+    // Font weight slider (variable font support)
+    panel
+      .querySelector("#prop-font-weight-slider")
+      ?.addEventListener("input", (e) => {
+        const layer = this.canvas.getSelectedLayer();
+        if (!layer) return;
+        const weight = parseInt(e.target.value);
+        this.canvas.updateLayer(layer.id, { fontWeight: weight });
+        const select = panel.querySelector("#prop-font-weight");
+        if (select) select.value = weight;
+      });
+    panel
+      .querySelector("#prop-font-weight-slider")
+      ?.addEventListener("change", () => this.canvas.snapshot());
 
     // Line height
     panel.querySelector("#prop-line-height")?.addEventListener("input", (e) => {
@@ -816,6 +937,52 @@ class App {
     bindPos("prop-x", "x");
     bindPos("prop-y", "y");
     bindPos("prop-width", "width");
+
+    // Ratio lock
+    panel.querySelector("#prop-ratio-lock")?.addEventListener("change", (e) => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer) return;
+      this.canvas.snapshot();
+      this.canvas.updateLayer(layer.id, { _lockRatio: e.target.checked });
+    });
+
+    // Layer blur
+    panel.querySelector("#prop-layer-blur")?.addEventListener("input", (e) => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer) return;
+      this.canvas.updateLayer(layer.id, { layerBlur: parseFloat(e.target.value) || 0 });
+    });
+    panel.querySelector("#prop-layer-blur")?.addEventListener("focus", () => this.canvas.snapshot());
+
+    // Shadow controls
+    panel.querySelector("#prop-shadow-x")?.addEventListener("input", (e) => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer) return;
+      const s = layer.boxShadow ?? { x: 2, y: 4, blur: 8, color: "rgba(0,0,0,0.4)" };
+      this.canvas.updateLayer(layer.id, { boxShadow: { ...s, x: parseFloat(e.target.value) || 0 } });
+    });
+    panel.querySelector("#prop-shadow-x")?.addEventListener("focus", () => this.canvas.snapshot());
+    panel.querySelector("#prop-shadow-y")?.addEventListener("input", (e) => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer) return;
+      const s = layer.boxShadow ?? { x: 2, y: 4, blur: 8, color: "rgba(0,0,0,0.4)" };
+      this.canvas.updateLayer(layer.id, { boxShadow: { ...s, y: parseFloat(e.target.value) || 0 } });
+    });
+    panel.querySelector("#prop-shadow-blur")?.addEventListener("input", (e) => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer) return;
+      const s = layer.boxShadow ?? { x: 2, y: 4, blur: 8, color: "rgba(0,0,0,0.4)" };
+      this.canvas.updateLayer(layer.id, { boxShadow: { ...s, blur: parseFloat(e.target.value) || 0 } });
+    });
+    panel.querySelector("#prop-shadow-color-swatch")?.addEventListener("click", () => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer) return;
+      const s = layer.boxShadow ?? { x: 2, y: 4, blur: 8, color: "rgba(0,0,0,0.4)" };
+      this._openPicker(s.color, (rgba) => {
+        this.canvas.updateLayer(layer.id, { boxShadow: { ...s, color: rgba } });
+        this._setSwatch("prop-shadow-color-swatch", rgba);
+      });
+    });
 
     // Badge extras
     panel
@@ -1101,6 +1268,24 @@ class App {
         this.canvas.snapshot();
         this.canvas.updateLayer(layer.id, { animEasing: e.target.value });
       });
+
+    // animOut controls
+    panel.querySelector("#prop-anim-out")?.addEventListener("change", (e) => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer) return;
+      this.canvas.snapshot();
+      this.canvas.updateLayer(layer.id, { animOut: e.target.value });
+    });
+    panel.querySelector("#prop-anim-out-duration")?.addEventListener("input", (e) => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer) return;
+      this.canvas.updateLayer(layer.id, { animOutDuration: parseFloat(e.target.value) || 0.1 });
+    });
+    panel.querySelector("#prop-anim-out-delay")?.addEventListener("input", (e) => {
+      const layer = this.canvas.getSelectedLayer();
+      if (!layer) return;
+      this.canvas.updateLayer(layer.id, { animOutDelay: parseFloat(e.target.value) || 0 });
+    });
 
     // Copy layer button
     panel.querySelector("#btn-copy-layer")?.addEventListener("click", () => {
@@ -1408,6 +1593,7 @@ class App {
         .join("")}
       <div class="dropdown-sep"></div>
       <button class="dropdown-item" id="dd-new-brand">+ Nova marca</button>
+      <button class="dropdown-item" id="dd-backup-all">⬇ Backup completo</button>
     `;
 
     menu.querySelectorAll("[data-brand-id]").forEach((btn) => {
@@ -1429,6 +1615,11 @@ class App {
       menu.classList.remove("open");
       document.getElementById("brand-name-label").textContent = brand.name;
       toast(`Marca "${brand.name}" criada!`, "success");
+    });
+
+    menu.querySelector("#dd-backup-all")?.addEventListener("click", async () => {
+      menu.classList.remove("open");
+      await this._exportFullBackup();
     });
   }
 
@@ -1775,6 +1966,34 @@ class App {
         }
       });
 
+    document.getElementById("btn-export-jpeg")?.addEventListener("click", async () => {
+      const transparent = document.getElementById("export-transparent")?.checked ?? false;
+      const quality = parseFloat(document.getElementById("export-image-quality")?.value ?? "0.9");
+      document.getElementById("export-modal")?.classList.remove("open");
+      toast("Exportando JPEG...", "info");
+      try {
+        await this.exporter.exportImage({ format: "jpeg", quality, transparent });
+        toast("JPEG exportado!", "success");
+      } catch (e) {
+        toast("Erro na exportação.", "error");
+        console.error(e);
+      }
+    });
+
+    document.getElementById("btn-export-webp")?.addEventListener("click", async () => {
+      const transparent = document.getElementById("export-transparent")?.checked ?? false;
+      const quality = parseFloat(document.getElementById("export-image-quality")?.value ?? "0.9");
+      document.getElementById("export-modal")?.classList.remove("open");
+      toast("Exportando WebP...", "info");
+      try {
+        await this.exporter.exportImage({ format: "webp", quality, transparent });
+        toast("WebP exportado!", "success");
+      } catch (e) {
+        toast("Erro na exportação.", "error");
+        console.error(e);
+      }
+    });
+
     document
       .getElementById("btn-export-all-slides")
       ?.addEventListener("click", async () => {
@@ -1927,12 +2146,57 @@ class App {
       });
 
     document
+      .getElementById("btn-export-pdf")
+      ?.addEventListener("click", async () => {
+        if (!window.jspdf) {
+          toast("Biblioteca jsPDF não carregada.", "error");
+          return;
+        }
+        document.getElementById("export-modal")?.classList.remove("open");
+        toast("Gerando PDF...", "info");
+        try {
+          const { jsPDF } = window.jspdf;
+          const state = this.canvas.getState();
+          const fmt = FORMATS[state.formatId] ?? FORMATS["ig-feed-square"];
+          const slide = this.slides.getActiveSlide();
+          if (!slide) throw new Error("Nenhum slide ativo.");
+
+          const pdf = new jsPDF({
+            orientation: fmt.width > fmt.height ? "landscape" : "portrait",
+            unit: "px",
+            format: [fmt.width, fmt.height],
+          });
+
+          const thumb = await this.exporter.generateThumbnail(Math.max(fmt.width, fmt.height));
+          const imgData = thumb.split(",")[1] ?? thumb;
+          pdf.addImage(imgData, "JPEG", 0, 0, fmt.width, fmt.height);
+
+          const safeName = String(slide.name || "slide").toLowerCase().replace(/[^\w\-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+          pdf.save(`${safeName || "slide"}.pdf`);
+          toast("PDF exportado!", "success");
+        } catch (e) {
+          toast("Erro ao exportar PDF.", "error");
+          console.error(e);
+        }
+      });
+
+    document
       .getElementById("btn-export-video")
       ?.addEventListener("click", async () => {
         document.getElementById("export-modal")?.classList.remove("open");
+        const fps = parseInt(document.getElementById("export-video-fps")?.value ?? "24");
+        const qualityMap = {
+          baixa: 2_000_000,
+          media: 8_000_000,
+          alta: 20_000_000,
+          maxima: 40_000_000,
+        };
+        const videoBitsPerSecond = qualityMap[document.getElementById("export-video-quality")?.value ?? "media"] ?? 8_000_000;
         const overlay = this._showVideoProgressOverlay();
         try {
           await this.anim.exportVideo({
+            fps,
+            videoBitsPerSecond,
             onProgress: ({ stage, current, total }) => {
               const pct = total > 0 ? Math.round((current / total) * 100) : 0;
               const label =
@@ -1954,7 +2218,21 @@ class App {
 
   _openExportModal() {
     this._renderExportFormatOptions();
+    this._updateExportPreview();
     document.getElementById("export-modal")?.classList.add("open");
+  }
+
+  async _updateExportPreview() {
+    const container = document.getElementById("export-preview-container");
+    const img = document.getElementById("export-preview-img");
+    if (!container || !img) return;
+    try {
+      const thumb = await this.exporter.generateThumbnail(480);
+      img.src = thumb;
+      container.style.display = "block";
+    } catch {
+      container.style.display = "none";
+    }
   }
 
   _showVideoProgressOverlay() {
@@ -1991,7 +2269,6 @@ class App {
     const host = document.getElementById("export-format-options");
     if (!host) return;
     const currentFmtId = this.canvas.getState().formatId;
-    // Re-render every time so the pre-selected format stays in sync
     host.innerHTML = "";
     Object.entries(FORMATS).forEach(([fmtId, fmt]) => {
       const label = document.createElement("label");
@@ -2005,6 +2282,11 @@ class App {
       `;
       host.appendChild(label);
     });
+  }
+
+  _updateExportImageQualityVisibility() {
+    const row = document.getElementById("export-image-quality-row");
+    if (row) row.style.display = "none";
   }
 
   _getSelectedExportFormatIds() {
@@ -2195,6 +2477,40 @@ class App {
     document
       .getElementById("btn-canvas-img-zoom-in")
       ?.addEventListener("click", () => this._adjustCanvasPreviewZoom(0.1));
+
+    // Alignment buttons
+    document.getElementById("btn-align-left")?.addEventListener("click", () => {
+      this.canvas.snapshot();
+      this.canvas.alignSelectedLayers("left");
+    });
+    document.getElementById("btn-align-center-h")?.addEventListener("click", () => {
+      this.canvas.snapshot();
+      this.canvas.alignSelectedLayers("centerH");
+    });
+    document.getElementById("btn-align-right")?.addEventListener("click", () => {
+      this.canvas.snapshot();
+      this.canvas.alignSelectedLayers("right");
+    });
+    document.getElementById("btn-align-top")?.addEventListener("click", () => {
+      this.canvas.snapshot();
+      this.canvas.alignSelectedLayers("top");
+    });
+    document.getElementById("btn-align-center-v")?.addEventListener("click", () => {
+      this.canvas.snapshot();
+      this.canvas.alignSelectedLayers("centerV");
+    });
+    document.getElementById("btn-align-bottom")?.addEventListener("click", () => {
+      this.canvas.snapshot();
+      this.canvas.alignSelectedLayers("bottom");
+    });
+    document.getElementById("btn-distribute-h")?.addEventListener("click", () => {
+      this.canvas.snapshot();
+      this.canvas.distributeSelectedLayers("horizontal");
+    });
+    document.getElementById("btn-distribute-v")?.addEventListener("click", () => {
+      this.canvas.snapshot();
+      this.canvas.distributeSelectedLayers("vertical");
+    });
   }
 
   _adjustCanvasPreviewZoom(delta) {
@@ -2384,6 +2700,33 @@ class App {
 
   _closeShareModal() {
     document.getElementById("share-modal")?.classList.remove("open");
+  }
+
+  _wireTheme() {
+    const saved = localStorage.getItem("pg_theme");
+    if (saved) document.documentElement.dataset.theme = saved;
+    document.getElementById("btn-theme")?.addEventListener("click", () => {
+      const current = document.documentElement.dataset.theme;
+      const next = current === "light" ? "" : "light";
+      document.documentElement.dataset.theme = next;
+      localStorage.setItem("pg_theme", next);
+    });
+    document.getElementById("btn-safe-area")?.addEventListener("click", () => {
+      if (this.canvas) this.canvas.toggleSafeArea();
+    });
+  }
+
+  _wireShortcutsModal() {
+    const modal = document.getElementById("shortcuts-modal");
+    document.getElementById("btn-shortcuts")?.addEventListener("click", () => {
+      modal?.classList.add("open");
+    });
+    document.getElementById("btn-close-shortcuts-modal")?.addEventListener("click", () => {
+      modal?.classList.remove("open");
+    });
+    modal?.addEventListener("click", (e) => {
+      if (e.target?.id === "shortcuts-modal") modal.classList.remove("open");
+    });
   }
 
   _wireAIModal() {
@@ -2610,6 +2953,15 @@ class App {
     )[0];
     const id = this._aiConfigId ?? existing?.id;
     const apiKey = apiKeyInput || existing?.apiKey || "";
+    if (apiKeyInput) {
+      toast("Validando API key...", "info");
+      const result = await aiEngine.validateApiKey({ provider, model, endpoint, apiKey });
+      if (!result.valid) {
+        toast(`✗ Key inválida: ${result.error}`, "error");
+        return;
+      }
+      toast("✓ API key válida — Conectado!", "success");
+    }
     const saved = await AIConfigDB.save({
       id,
       brandId,
@@ -4370,6 +4722,9 @@ class App {
         await this._createProject(name, "slides");
       });
     document
+      .getElementById("btn-templates-gallery")
+      ?.addEventListener("click", () => this._openTemplatesModal());
+    document
       .getElementById("btn-import-project-file")
       ?.addEventListener("click", () => {
         document.getElementById("project-file-input")?.click();
@@ -4382,6 +4737,463 @@ class App {
         await this._importProjectFromFile(file);
         e.target.value = "";
       });
+    document
+      .getElementById("btn-close-templates-modal")
+      ?.addEventListener("click", () => {
+        document.getElementById("templates-modal")?.classList.remove("open");
+      });
+  }
+
+  _openTemplatesModal() {
+    this._renderTemplatesGallery("instagram");
+    document.getElementById("templates-modal")?.classList.add("open");
+  }
+
+  _renderTemplatesGallery(platform) {
+    const tabsHost = document.getElementById("templates-format-tabs");
+    const gridHost = document.getElementById("templates-grid");
+    if (!tabsHost || !gridHost) return;
+
+    const platforms = ["instagram", "facebook", "twitter", "linkedin", "youtube", "other"];
+    tabsHost.innerHTML = "";
+    platforms.forEach(p => {
+      const btn = document.createElement("button");
+      btn.className = `btn btn-sm ${p === platform ? "btn-primary" : "btn-ghost"}`;
+      btn.textContent = p.charAt(0).toUpperCase() + p.slice(1);
+      btn.style.cssText = "text-transform:capitalize;";
+      btn.addEventListener("click", () => {
+        this._renderTemplatesGallery(p);
+      });
+      tabsHost.appendChild(btn);
+    });
+
+    const TEMPLATES = this._getBuiltInTemplates();
+    const filtered = TEMPLATES.filter(t => t.platform === platform);
+    if (!filtered.length) {
+      gridHost.innerHTML = '<div class="text-xs text-muted" style="padding:16px;">Nenhum template para esta plataforma ainda.</div>';
+      return;
+    }
+    gridHost.innerHTML = "";
+    filtered.forEach(tpl => {
+      const card = document.createElement("button");
+      card.className = "project-card";
+      card.style.cssText = "text-align:left;";
+      const fmt = FORMATS[tpl.formatId] ?? {};
+      card.innerHTML = `
+        <div class="project-card-thumb project-card-thumb-empty" style="display:flex;align-items:center;justify-content:center;font-size:48px;">${fmt.icon ?? "📐"}</div>
+        <div class="project-card-meta">
+          <div class="project-card-top">
+            <div class="project-card-name" style="font-size:12px;">${tpl.name}</div>
+          </div>
+          <div class="project-card-sub">${fmt.label ?? tpl.formatId} • ${tpl.layers.length} camada${tpl.layers.length === 1 ? "" : "s"}</div>
+        </div>
+      `;
+      card.addEventListener("click", async () => {
+        document.getElementById("templates-modal")?.classList.remove("open");
+        const name = prompt("Nome do projeto:");
+        if (!name) return;
+        const state = structuredClone(tpl);
+        const projectId = crypto.randomUUID();
+        await ProjectsDB.save({
+          id: projectId,
+          name,
+          mode: "single",
+          brandId: this.brands.getCurrentBrandId(),
+          slides: [{ id: crypto.randomUUID(), state }],
+          activeSlideIndex: 0,
+          coverThumbnail: null,
+        });
+        await this._openProject(projectId);
+        await this._renderProjectsHome();
+      });
+      gridHost.appendChild(card);
+    });
+  }
+
+  _getBuiltInTemplates() {
+    return [
+      /* ── INSTAGRAM ── */
+      {
+        platform: "instagram", formatId: "ig-feed-square", name: "Feed Minimalista",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "Novo"), x: 8.5, y: 9.5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Seu título\naqui"), x: 8.5, y: 30, width: 83 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Texto de suporte"), x: 8.5, y: 70, width: 62 },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-feed-square", name: "Feed Bold Typo",
+        layers: [
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "TÍTULO\nPODEROSO"), x: 5, y: 35, width: 90, fontSize: 11.5, fontWeight: 900 },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-feed-square", name: "Feed Editorial",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "Destaque"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Título do\nArtigo"), x: 5, y: 15, width: 90, fontSize: 7 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Descrição ou chamada para ação"), x: 5, y: 80, width: 75 },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-feed-square", name: "Feed Quote Central",
+        layers: [
+          {
+            id: crypto.randomUUID(), name: "Quote", type: "text", subtype: "headline",
+            visible: true, locked: false,
+            x: 10, y: 30, width: 80,
+            content: "« Frase impactante\ncentralizada »",
+            fontFamily: "-apple-system", fontSize: 5.5, fontWeight: 700,
+            fontStyle: "normal", color: "#ffffff",
+            textAlign: "center", lineHeight: 1.3, letterSpacing: "0em",
+            textTransform: "none", opacity: 1,
+            ...ANIM_DEFAULTS, animIn: "fade",
+          },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-feed-square", name: "Feed Com Imagem",
+        layers: [
+          { ...makeImageLayer(crypto.randomUUID(), "Imagem", ""), x: 55, y: 20, width: 38, height: 60 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Título\naqui"), x: 5, y: 25, width: 45, fontSize: 6 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Texto curto"), x: 5, y: 75, width: 45 },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-feed-square", name: "Feed Com CTA",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "Promoção"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "OFERTA\nIMPERDÍVEL"), x: 5, y: 20, width: 90, fontSize: 9, fontWeight: 900 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Condição especial por tempo limitado"), x: 5, y: 70, width: 70 },
+          {
+            id: crypto.randomUUID(), name: "CTA", type: "text", subtype: "badge",
+            visible: true, locked: false,
+            x: 5, y: 85, width: "auto",
+            content: "👉 CLIQUE AQUI",
+            fontFamily: "-apple-system", fontSize: 2.5, fontWeight: 700,
+            color: "#ffffff", textAlign: "left", opacity: 1,
+            badgeBg: "#e74c3c", badgeBorderColor: "transparent",
+            badgeBorderWidth: 0, badgeBorderRadius: 100,
+            badgePaddingX: 2.5, badgePaddingY: 0.5,
+            ...ANIM_DEFAULTS, animIn: "slide-left",
+          },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-feed-square", name: "Feed Steps (Tutorial)",
+        layers: [
+          {
+            id: crypto.randomUUID(), name: "Passo 1", type: "text", subtype: "badge",
+            visible: true, locked: false, x: 5, y: 10, width: "auto",
+            content: "① Passo um", fontFamily: "-apple-system", fontSize: 2.2, fontWeight: 600,
+            color: "#7BC4EC", badgeBg: "transparent", badgeBorderColor: "rgba(123,196,236,0.5)",
+            badgeBorderWidth: 1, badgeBorderRadius: 100, badgePaddingX: 1.2, badgePaddingY: 0.3,
+            ...ANIM_DEFAULTS,
+          },
+          {
+            id: crypto.randomUUID(), name: "Passo 2", type: "text", subtype: "badge",
+            visible: true, locked: false, x: 5, y: 38, width: "auto",
+            content: "② Passo dois", fontFamily: "-apple-system", fontSize: 2.2, fontWeight: 600,
+            color: "#7BC4EC", badgeBg: "transparent", badgeBorderColor: "rgba(123,196,236,0.5)",
+            badgeBorderWidth: 1, badgeBorderRadius: 100, badgePaddingX: 1.2, badgePaddingY: 0.3,
+            ...ANIM_DEFAULTS,
+          },
+          {
+            id: crypto.randomUUID(), name: "Passo 3", type: "text", subtype: "badge",
+            visible: true, locked: false, x: 5, y: 66, width: "auto",
+            content: "③ Passo três", fontFamily: "-apple-system", fontSize: 2.2, fontWeight: 600,
+            color: "#7BC4EC", badgeBg: "transparent", badgeBorderColor: "rgba(123,196,236,0.5)",
+            badgeBorderWidth: 1, badgeBorderRadius: 100, badgePaddingX: 1.2, badgePaddingY: 0.3,
+            ...ANIM_DEFAULTS,
+          },
+          {
+            id: crypto.randomUUID(), name: "Passo 4", type: "text", subtype: "badge",
+            visible: true, locked: false, x: 5, y: 85, width: "auto",
+            content: "④ Passo quatro", fontFamily: "-apple-system", fontSize: 2.2, fontWeight: 600,
+            color: "#7BC4EC", badgeBg: "transparent", badgeBorderColor: "rgba(123,196,236,0.5)",
+            badgeBorderWidth: 1, badgeBorderRadius: 100, badgePaddingX: 1.2, badgePaddingY: 0.3,
+            ...ANIM_DEFAULTS,
+          },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-feed-square", name: "Feed Antes/Depois",
+        layers: [
+          { ...makeImageLayer(crypto.randomUUID(), "Antes", ""), x: 5, y: 20, width: 40, height: 60 },
+          { ...makeImageLayer(crypto.randomUUID(), "Depois", ""), x: 55, y: 20, width: 40, height: 60 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "ANTES → DEPOIS"), x: 5, y: 85, width: 90, fontSize: 6, textAlign: "center" },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-feed-square", name: "Feed Testemunho",
+        layers: [
+          {
+            id: crypto.randomUUID(), name: "Aspas", type: "text", subtype: "body",
+            visible: true, locked: false, x: 10, y: 20, width: 80,
+            content: '" Depoimento real de cliente sobre seu produto ou serviço. Texto de exemplo."',
+            fontFamily: "-apple-system", fontSize: 3.2, fontWeight: 400,
+            fontStyle: "italic", color: "rgba(255,255,255,0.85)",
+            textAlign: "center", lineHeight: 1.5,
+            ...ANIM_DEFAULTS, animIn: "fade",
+          },
+          { ...makeBadgeLayer(crypto.randomUUID(), "Nome", "— Cliente Satisfeito"), x: 35, y: 80 },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-feed-portrait", name: "Retrato Minimalista",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "Novo"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Título\nVertical"), x: 5, y: 18, width: 90, fontSize: 8 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Texto de suporte para formato retrato"), x: 5, y: 78, width: 80 },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-feed-portrait", name: "Retrato Bold",
+        layers: [
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "FRASE\nDE IMPACTO"), x: 5, y: 35, width: 90, fontSize: 10, fontWeight: 900 },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-story", name: "Story Announcement",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "Novo"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Atenção:\nNovidade!"), x: 5, y: 25, width: 75, fontSize: 9 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Sua mensagem de impacto aqui"), x: 5, y: 75, width: 80 },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-story", name: "Story Quebra-cabeça",
+        layers: [
+          { ...makeImageLayer(crypto.randomUUID(), "Imagem topo", ""), x: 0, y: 0, width: 100, height: 35 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Parte 1:\nIntrodução"), x: 5, y: 40, width: 90, fontSize: 6 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Continue passando para a próxima tela →"), x: 5, y: 80, width: 80 },
+        ],
+      },
+      {
+        platform: "instagram", formatId: "ig-story", name: "Story CTA",
+        layers: [
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "SWIPE UP\nOU CLIQUE"), x: 5, y: 30, width: 90, fontSize: 9, fontWeight: 800, textAlign: "center" },
+          {
+            id: crypto.randomUUID(), name: "CTA", type: "text", subtype: "badge",
+            visible: true, locked: false, x: 25, y: 70, width: "auto",
+            content: "👉 LINK NA BIO",
+            fontFamily: "-apple-system", fontSize: 3, fontWeight: 700,
+            color: "#ffffff", textAlign: "center",
+            badgeBg: "#e74c3c", badgeBorderColor: "transparent",
+            badgeBorderWidth: 0, badgeBorderRadius: 100,
+            badgePaddingX: 3, badgePaddingY: 0.8,
+            ...ANIM_DEFAULTS,
+          },
+        ],
+      },
+
+      /* ── FACEBOOK ── */
+      {
+        platform: "facebook", formatId: "fb-post", name: "FB Post Simples",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "Post"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Mensagem\npara Facebook"), x: 5, y: 25, width: 90 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Texto complementar"), x: 5, y: 75, width: 80 },
+        ],
+      },
+      {
+        platform: "facebook", formatId: "fb-post", name: "FB Evento",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "🎉 Evento"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Nome do\nEvento"), x: 5, y: 22, width: 90, fontSize: 8 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "📅 Data: 25/Dez\n📍 Local: Online\n🔥 Inscreva-se já!"), x: 5, y: 75, width: 85 },
+        ],
+      },
+      {
+        platform: "facebook", formatId: "fb-post", name: "FB Promoção",
+        layers: [
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "OFERTA\nFLASH"), x: 5, y: 25, width: 90, fontSize: 10, fontWeight: 900, color: "#ffcc00" },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "De R$199 por R$99\nSó hoje! Corra!"), x: 5, y: 75, width: 75 },
+        ],
+      },
+      {
+        platform: "facebook", formatId: "fb-story", name: "FB Story",
+        layers: [
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "STORY\nFACEBOOK"), x: 5, y: 40, width: 90, fontSize: 9, fontWeight: 800, textAlign: "center" },
+        ],
+      },
+
+      /* ── LINKEDIN ── */
+      {
+        platform: "linkedin", formatId: "li-post-square", name: "LI Post Profissional",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "LinkedIn"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Post\nProfesional"), x: 5, y: 30, width: 90 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Contenido profesional"), x: 5, y: 75, width: 80 },
+        ],
+      },
+      {
+        platform: "linkedin", formatId: "li-post", name: "LI Thought Leadership",
+        layers: [
+          {
+            id: crypto.randomUUID(), name: "Quote", type: "text", subtype: "headline",
+            visible: true, locked: false,
+            x: 8, y: 25, width: 84,
+            content: "\" Opinião forte sobre\no futuro da indústria. Frase de impacto. \"",
+            fontFamily: "-apple-system", fontSize: 4.5, fontWeight: 700,
+            fontStyle: "italic", color: "#ffffff",
+            textAlign: "center", lineHeight: 1.4,
+            ...ANIM_DEFAULTS, animIn: "fade",
+          },
+          { ...makeSubLayer(crypto.randomUUID(), "Nome", "Seu nome • Cargo"), x: 25, y: 85, width: 50 },
+        ],
+      },
+      {
+        platform: "linkedin", formatId: "li-story", name: "LI Article Card",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "Artigo"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Título do\nArtigo"), x: 5, y: 18, width: 90, fontSize: 7 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Resumo do artigo com chamada para leitura"), x: 5, y: 80, width: 75 },
+        ],
+      },
+
+      /* ── TWITTER/X ── */
+      {
+        platform: "twitter", formatId: "twitter-post", name: "Tweet Visual",
+        layers: [
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Tweet\nGrande"), x: 5, y: 35, width: 90, fontSize: 9 },
+        ],
+      },
+      {
+        platform: "twitter", formatId: "twitter-post", name: "Tweet Quote",
+        layers: [
+          {
+            id: crypto.randomUUID(), name: "Quote", type: "text", subtype: "headline",
+            visible: true, locked: false,
+            x: 10, y: 30, width: 80,
+            content: "\" Frase marcante\npara Twitter/X \"",
+            fontFamily: "-apple-system", fontSize: 5, fontWeight: 700,
+            fontStyle: "italic", color: "#ffffff",
+            textAlign: "center", lineHeight: 1.3,
+            ...ANIM_DEFAULTS, animIn: "fade",
+          },
+        ],
+      },
+      {
+        platform: "twitter", formatId: "twitter-post", name: "Tweet Thread Cover",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "Thread"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "TÓPICO\nQUENTE"), x: 5, y: 22, width: 90, fontSize: 8 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Parte 1 de uma thread completa sobre o tema"), x: 5, y: 78, width: 80 },
+        ],
+      },
+
+      /* ── YOUTUBE ── */
+      {
+        platform: "youtube", formatId: "yt-thumb", name: "YT Thumbnail Clássico",
+        layers: [
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "VIDEO\nTITLE"), x: 3, y: 55, width: 94, fontSize: 12, fontWeight: 900, color: "#ffffff" },
+        ],
+      },
+      {
+        platform: "youtube", formatId: "yt-thumb", name: "YT Thumbnail Reação",
+        layers: [
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "VOCÊ NÃO\nVAI ACREDITAR"), x: 3, y: 55, width: 94, fontSize: 10, fontWeight: 900, color: "#ff0000" },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "@canal • views"), x: 3, y: 85, width: 60 },
+        ],
+      },
+      {
+        platform: "youtube", formatId: "yt-thumb", name: "YT Thumbnail Tutorial",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "TUTORIAL"), x: 3, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "COMO FAZER\nQUALQUER COISA"), x: 3, y: 30, width: 94, fontSize: 8, fontWeight: 800 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Passo a passo completo"), x: 3, y: 85, width: 70 },
+        ],
+      },
+
+      /* ── WHATSAPP ── */
+      {
+        platform: "whatsapp", formatId: "whatsapp-status", name: "WA Status Texto",
+        layers: [
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "STATUS\nWHATSAPP"), x: 5, y: 40, width: 90, fontSize: 9, fontWeight: 800, textAlign: "center" },
+        ],
+      },
+      {
+        platform: "whatsapp", formatId: "whatsapp-status", name: "WA Status Promo",
+        layers: [
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "OFERTA DO\nDIA 🔥"), x: 5, y: 30, width: 90, fontSize: 9, fontWeight: 900, textAlign: "center", color: "#25D366" },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Produto • R$99"), x: 5, y: 75, width: 90, textAlign: "center" },
+        ],
+      },
+
+      /* ── TIKTOK ── */
+      {
+        platform: "tiktok", formatId: "tiktok-video", name: "TikTok Cover",
+        layers: [
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "VÍDEO\nTIKTOK"), x: 5, y: 35, width: 90, fontSize: 10, fontWeight: 900, textAlign: "center" },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "@usuario • #fyp"), x: 5, y: 80, width: 90, textAlign: "center" },
+        ],
+      },
+      {
+        platform: "tiktok", formatId: "tiktok-video", name: "TikTok Trend",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "TRENDING"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "VIRAL\nHOJE"), x: 5, y: 30, width: 90, fontSize: 10, fontWeight: 900, textAlign: "center" },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "#viral #fyp #trend"), x: 5, y: 80, width: 90, textAlign: "center" },
+        ],
+      },
+
+      /* ── PINTEREST ── */
+      {
+        platform: "pinterest", formatId: "pinterest-pin", name: "Pin Vertical",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "Pin"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "IDEIA\nINSPIRADORA"), x: 5, y: 18, width: 90, fontSize: 8 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Salva para ver depois"), x: 5, y: 82, width: 75 },
+        ],
+      },
+      {
+        platform: "pinterest", formatId: "pinterest-pin", name: "Pin Produto",
+        layers: [
+          { ...makeImageLayer(crypto.randomUUID(), "Produto", ""), x: 55, y: 15, width: 38, height: 70 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Nome do\nProduto"), x: 5, y: 20, width: 45, fontSize: 5 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "R$99,90"), x: 5, y: 75, width: 45 },
+        ],
+      },
+
+      /* ── GENERIC ── */
+      {
+        platform: "other", formatId: "ig-feed-square", name: "Banner Genérico",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "Banner"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "Seu\nBanner"), x: 5, y: 35, width: 90 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Texto adicional"), x: 5, y: 75, width: 80 },
+        ],
+      },
+      {
+        platform: "other", formatId: "ig-feed-square", name: "Anúncio Classificado",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "ANÚNCIO"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "PRODUTO\nÀ VENDA"), x: 5, y: 25, width: 90, fontSize: 8 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "R$ 199\nCondição: Novo\nLocal: SP"), x: 5, y: 75, width: 80 },
+          {
+            id: crypto.randomUUID(), name: "CTA", type: "text", subtype: "badge",
+            visible: true, locked: false,
+            x: 5, y: 88, width: "auto",
+            content: "💬 WHATSAPP",
+            fontFamily: "-apple-system", fontSize: 2.5, fontWeight: 700,
+            color: "#ffffff", textAlign: "left",
+            badgeBg: "#25D366", badgeBorderColor: "transparent",
+            badgeBorderWidth: 0, badgeBorderRadius: 100,
+            badgePaddingX: 2.5, badgePaddingY: 0.5,
+            ...ANIM_DEFAULTS,
+          },
+        ],
+      },
+      {
+        platform: "other", formatId: "ig-feed-square", name: "Capa de Ebook",
+        layers: [
+          { ...makeBadgeLayer(crypto.randomUUID(), "Badge", "EBOOK"), x: 5, y: 5 },
+          { ...makeHeadlineLayer(crypto.randomUUID(), "Headline", "TÍTULO\nDO EBOOK"), x: 5, y: 30, width: 90, fontSize: 9, fontWeight: 800 },
+          { ...makeSubLayer(crypto.randomUUID(), "Subtítulo", "Subtítulo ou autor"), x: 5, y: 80, width: 75 },
+        ],
+      },
+    ];
   }
 
   async _createProject(name, mode = "slides") {
@@ -4584,6 +5396,45 @@ class App {
     a.remove();
     URL.revokeObjectURL(url);
     toast("Projeto exportado em JSON.", "success");
+  }
+
+  async _exportFullBackup() {
+    try {
+      toast("Preparando backup completo...", "info");
+      const [brands, projects, presets, colors, fonts, assets] = await Promise.all([
+        BrandsDB.getAll(),
+        ProjectsDB.getAll(),
+        PresetsDB.getAll(),
+        ColorsDB.getAll(),
+        FontsDB.getAll(),
+        AssetsDB.getAll(),
+      ]);
+      const payload = {
+        schema: "postgenerate-backup-v1",
+        exportedAt: new Date().toISOString(),
+        appVersion: "v1.0.1",
+        brands,
+        projects,
+        presets,
+        colors,
+        fonts,
+        assets,
+      };
+      const json = JSON.stringify(payload, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `postgenerate-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast("Backup completo exportado!", "success");
+    } catch (e) {
+      toast("Erro ao exportar backup.", "error");
+      console.error(e);
+    }
   }
 
   async _importProjectFromFile(file) {
@@ -5302,12 +6153,88 @@ class App {
           this.canvas.removeLayer(layer.id);
         }
       }
+      // Arrow keys to move selected layer
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+        const layers = this.canvas.getSelectedLayers();
+        if (layers.length > 0) {
+          e.preventDefault();
+          const step = e.shiftKey ? 10 : 1;
+          layers.forEach(layer => {
+            if (layer.locked) return;
+            const dx = e.key === "ArrowRight" ? step : e.key === "ArrowLeft" ? -step : 0;
+            const dy = e.key === "ArrowDown" ? step : e.key === "ArrowUp" ? -step : 0;
+            this.canvas.updateLayer(layer.id, {
+              x: (layer.x ?? 0) + dx,
+              y: (layer.y ?? 0) + dy,
+            });
+          });
+        }
+      }
+      // Ctrl+A to select all
+      if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+        e.preventDefault();
+        this.canvas.selectAllLayers();
+      }
+      // Ctrl+G to group selected layers
+      if ((e.ctrlKey || e.metaKey) && e.key === "g" && !e.shiftKey) {
+        e.preventDefault();
+        const group = this.canvas.groupSelectedLayers();
+        if (group) toast("Camadas agrupadas.", "success");
+      }
+      // Ctrl+Shift+G to ungroup
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "g") {
+        e.preventDefault();
+        const layer = this.canvas.getSelectedLayer();
+        if (layer?.type === "group") {
+          this.canvas.ungroupLayer(layer.id);
+          toast("Grupo desfeito.", "success");
+        }
+      }
+      // Escape to deselect
+      if (e.key === "Escape") {
+        this.canvas.clearSelection();
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === "d") {
         e.preventDefault();
         const layer = this.canvas.getSelectedLayer();
         if (layer) {
           this.canvas.snapshot();
           this.canvas.duplicateLayer(layer.id);
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "[") {
+        e.preventDefault();
+        const layer = this.canvas.getSelectedLayer();
+        if (layer) { this.canvas.snapshot(); this.canvas.moveLayer(layer.id, "up"); }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "]") {
+        e.preventDefault();
+        const layer = this.canvas.getSelectedLayer();
+        if (layer) { this.canvas.snapshot(); this.canvas.moveLayer(layer.id, "down"); }
+      }
+      // Copy layer style (Ctrl+Alt+C) - placeholder for now
+      if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "c") {
+        const layers = this.canvas.getSelectedLayers();
+        if (layers.length > 0) {
+          e.preventDefault();
+          this._styleClipboard = layers.map(l => {
+            const { id, content, src, x, y, ...styleProps } = l;
+            return styleProps;
+          });
+          toast(`Estilo de ${layers.length} camada(s) copiado.`, "info");
+        }
+      }
+      // Paste layer style (Ctrl+Alt+V)
+      if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "v") {
+        const layers = this.canvas.getSelectedLayers();
+        if (layers.length > 0 && this._styleClipboard) {
+          e.preventDefault();
+          this.canvas.snapshot();
+          layers.forEach((l, i) => {
+            const style = this._styleClipboard[i % this._styleClipboard.length];
+            this.canvas.updateLayer(l.id, { ...style });
+          });
+          toast(`Estilo aplicado a ${layers.length} camada(s).`, "success");
         }
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "c") {
@@ -5773,7 +6700,41 @@ class App {
         });
         item.style.borderColor = "var(--accent)";
         item.style.background = "var(--accent-bg)";
+        this._renderPresetVersionHistory(preset);
       });
+      list.appendChild(item);
+    });
+  }
+
+  _renderPresetVersionHistory(preset) {
+    const section = document.getElementById("preset-version-section");
+    const list = document.getElementById("preset-version-list");
+    if (!section || !list) return;
+    const history = preset._history ?? [];
+    if (!history.length) {
+      section.style.display = "none";
+      return;
+    }
+    section.style.display = "block";
+    list.innerHTML = "";
+    history.forEach((entry, i) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "btn btn-ghost btn-sm";
+      item.style.cssText = "justify-content:space-between;width:100%;font-size:11px;";
+      const date = new Date(entry.savedAt);
+      item.textContent = `${i + 1}. ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+      const restoreBtn = document.createElement("button");
+      restoreBtn.type = "button";
+      restoreBtn.className = "btn btn-sm";
+      restoreBtn.textContent = "Restaurar";
+      restoreBtn.addEventListener("click", async () => {
+        if (!confirm(`Restaurar versão ${i + 1}? O canvas será substituído.`)) return;
+        this.canvas.snapshot();
+        this.canvas.setState(structuredClone(entry.state));
+        toast(`Versão ${i + 1} restaurada.`, "success");
+      });
+      item.appendChild(restoreBtn);
       list.appendChild(item);
     });
   }
@@ -5838,7 +6799,16 @@ class App {
       brandPrimaryFont: brand?.primaryFont ?? "",
       brandVoice: brand?.brandVoice ?? "",
       animations: animationSummary,
+      updatedAt: new Date().toISOString(),
     });
+
+    const existingWithHistory = id ? await PresetsDB.get(id) : null;
+    if (existingWithHistory?.id) {
+      const history = existingWithHistory._history ?? [];
+      history.unshift({ state: structuredClone(existingWithHistory.state), savedAt: new Date().toISOString() });
+      const trimmed = history.slice(0, 5);
+      await PresetsDB.save({ id, _history: trimmed });
+    }
 
     // Propagate structural changes to all slides that use this preset
     if (id) {

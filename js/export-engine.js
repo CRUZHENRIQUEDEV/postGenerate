@@ -106,6 +106,84 @@ export class ExportEngine {
     }
   }
 
+  async exportImage({
+    format = "png",
+    quality = 0.92,
+    transparent = false,
+    formatId,
+    filename,
+    download = true,
+  } = {}) {
+    const state = this._engine.getState();
+    const fmtId = formatId ?? state.formatId;
+    const fmt = getFormat(fmtId);
+
+    const clone = document.createElement("div");
+    clone.style.cssText = `
+      position: fixed;
+      top: -9999px;
+      left: -9999px;
+      width: ${fmt.width}px;
+      height: ${fmt.height}px;
+      overflow: hidden;
+      z-index: -1;
+    `;
+    document.body.appendChild(clone);
+
+    const exportState = structuredClone(state);
+    if (!transparent) {
+      const bg = exportState.background;
+      if (bg.type === "solid") clone.style.background = bg.color;
+      else if (bg.type === "gradient") {
+        const g = bg.gradient;
+        const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
+        const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
+        const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? g.opacity ?? 100));
+        const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? g.opacity ?? 100));
+        const from = this._withOpacity(g.from, fromOpacity);
+        const to = this._withOpacity(g.to, toOpacity);
+        clone.style.background = g.type === "linear"
+          ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+          : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
+      } else if (bg.type === "image" && bg.image) {
+        clone.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
+      }
+    }
+
+    for (const layer of exportState.layers) {
+      if (!layer.visible) continue;
+      const el = this._buildExportLayer(layer, fmt.width, fmt.height);
+      clone.appendChild(el);
+    }
+
+    try {
+      await document.fonts.ready;
+      await new Promise((r) => setTimeout(r, 100));
+
+      const canvas = await window.html2canvas(clone, {
+        width: fmt.width,
+        height: fmt.height,
+        scale: 1,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: transparent ? null : "#000000",
+        logging: false,
+      });
+
+      const mimeType = format === "jpeg" ? "image/jpeg" : format === "webp" ? "image/webp" : "image/png";
+      const qualityVal = format === "png" ? undefined : quality;
+      const blob = await new Promise((resolve) =>
+        canvas.toBlob(resolve, mimeType, qualityVal),
+      );
+      const ext = format === "jpeg" ? "jpg" : format;
+      const name = filename ?? this._buildFilename(state, fmtId, ext);
+      if (download) this._download(blob, name);
+      return blob;
+    } finally {
+      clone.remove();
+    }
+  }
+
   async exportSVG({
     transparent = false,
     formatId,
