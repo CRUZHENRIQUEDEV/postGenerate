@@ -26,6 +26,7 @@ import {
   makeImageLayer,
   makeIconLayer,
   makeShapeLayer,
+  ANIM_DEFAULTS,
 } from "./canvas-engine.js";
 import { ExportEngine } from "./export-engine.js";
 import { BrandManager } from "./brand-manager.js";

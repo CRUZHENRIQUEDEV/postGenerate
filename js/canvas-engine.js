@@ -53,10 +53,11 @@ export function injectAnimCSS() {
 }
 
 /* ── Shared anim defaults ───────────────────────────────── */
+export { ANIM_DEFAULTS };
 const ANIM_DEFAULTS = {
-  animIn: "none", // 'none'|'fade'|'slide-up'|'slide-down'|'slide-left'|'slide-right'|'scale'|'blur-in'|'bounce'|'move-up'|'move-down'|'move-left'|'move-right'|'rotate-in'
-  animDuration: 0.65, // seconds
-  animDelay: 0, // seconds
+  animIn: "none",
+  animDuration: 0.65,
+  animDelay: 0,
   animEasing: "cubic-bezier(0.22,1,0.36,1)",
   animOut: "none",
   animOutDuration: 0.65,
