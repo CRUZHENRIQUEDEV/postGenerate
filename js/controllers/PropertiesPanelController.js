@@ -661,18 +661,17 @@ export class PropertiesPanelController {
     panel.querySelector("#btn-img-recolor")?.addEventListener("click", async () => {
       const layer = this._canvas.getSelectedLayer();
       if (!layer || layer.type !== "image" || !layer.src) return;
-      this._openPicker("#ffffff", async (color) => {
+      try {
+        const color = await this._openPicker("#ffffff");
         if (!color) return;
         this._canvas.snapshot();
-        try {
-          const recolored = await this._imageColorService.recolorImage(layer.src, color, { opacity: 1.0 });
-          this._canvas.updateLayer(layer.id, { src: recolored });
-          const swatch = document.getElementById("prop-img-color-swatch");
-          if (swatch) swatch.style.background = color;
-        } catch (e) {
-          this._toast("Erro ao aplicar cor na imagem.", "error");
-        }
-      });
+        const recolored = await this._imageColorService.recolorImage(layer.src, color, { opacity: 1.0 });
+        this._canvas.updateLayer(layer.id, { src: recolored });
+        const swatch = document.getElementById("prop-img-color-swatch");
+        if (swatch) swatch.style.background = color;
+      } catch (e) {
+        this._toast("Erro ao aplicar cor.", "error");
+      }
     });
 
     panel.querySelector("#btn-img-reset-color")?.addEventListener("click", () => {

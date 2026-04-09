@@ -346,7 +346,7 @@ export class AIService {
     const input = document.createElement("input");
     input.type = "file";
     input.multiple = true;
-    input.accept = "*/*";
+    input.accept = ".txt,.md,.json,.csv,.xml,.html,.css,.js,.ts,.py,.sql,.yaml,.yml";
     input.addEventListener("change", async (e) => {
       const files = Array.from(e.target.files ?? []);
       for (const file of files) {
@@ -354,7 +354,7 @@ export class AIService {
         await BrandDocsDB.save({
           brandId,
           name: file.name,
-          mimeType: file.type || "application/octet-stream",
+          mimeType: file.type || "text/plain",
           content,
         });
       }
@@ -366,19 +366,7 @@ export class AIService {
   }
 
   async _extractDocContent(file) {
-    const name = file.name?.toLowerCase?.() ?? "";
-    const isTextLike =
-      file.type.startsWith("text/") ||
-      name.endsWith(".md") ||
-      name.endsWith(".txt") ||
-      name.endsWith(".json") ||
-      name.endsWith(".csv") ||
-      name.endsWith(".xml");
-    if (isTextLike) {
-      return await this._brands.constructor.readFileAsText(file);
-    }
-    const b64 = await this._brands.constructor.readFileAsBase64(file);
-    return `[ARQUIVO_BINARIO:${file.name}] ${b64.slice(0, 1200)}`;
+    return await this._brands.constructor.readFileAsText(file);
   }
 
   _renderAIDocsList() {
@@ -1336,9 +1324,10 @@ export class AIService {
       const lower = name.toLowerCase();
       const isMd = lower.endsWith(".md") || lower.endsWith(".markdown");
       const isText = this._isEditableAIDoc(doc) || isMd;
-      const prepared = isText ? this._normalizeMarkdownForAI(raw) : raw;
-      const clipped = prepared.slice(0, isText ? 6000 : 200);
-      const kind = isMd ? "md" : isText ? "text" : "bin";
+      if (!isText) continue;
+      const prepared = this._normalizeMarkdownForAI(raw);
+      const clipped = prepared.slice(0, 6000);
+      const kind = isMd ? "md" : "text";
       meta.push({ name, chars: prepared.length, kind });
       const chunk = `## ${name}\n[TIPO:${kind}] [CHARS:${prepared.length}]\n${clipped}\n\n`;
       if ((buffer + chunk).length > 24000) break;
