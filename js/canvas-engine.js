@@ -767,6 +767,8 @@ export class CanvasEngine {
     if (layer.hasBorder) {
       const bw = ((layer.borderWidth ?? 2) * cw) / 1080;
       el.style.border = `${bw}px solid ${layer.borderColor ?? "rgba(255,255,255,0.28)"}`;
+    } else {
+      el.style.border = "none";
     }
     // Shadow
     if (layer.boxShadow) {

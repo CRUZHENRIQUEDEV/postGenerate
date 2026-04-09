@@ -165,6 +165,10 @@ export class PropertiesPanelController {
     this._originalImageSrc = layer.src ?? null;
     const colorSwatch = document.getElementById("prop-img-color-swatch");
     if (colorSwatch) colorSwatch.style.background = "transparent";
+    const hasBorder = document.getElementById("prop-img-has-border");
+    if (hasBorder) hasBorder.checked = !!layer.hasBorder;
+    this._setSwatch("prop-img-border-swatch", layer.borderColor ?? "rgba(255,255,255,0.28)");
+    this._setVal("prop-img-border-width", layer.borderWidth ?? 2);
   }
 
   _fillShapeControls(layer) {
@@ -682,6 +686,31 @@ export class PropertiesPanelController {
       this._canvas.updateLayer(layer.id, { src: this._originalImageSrc });
       const swatch = document.getElementById("prop-img-color-swatch");
       if (swatch) swatch.style.background = "transparent";
+    });
+
+    panel.querySelector("#prop-img-has-border")?.addEventListener("change", (e) => {
+      const layer = this._canvas.getSelectedLayer();
+      if (!layer || layer.type !== "image") return;
+      this._canvas.snapshot();
+      this._canvas.updateLayer(layer.id, { hasBorder: e.target.checked });
+    });
+
+    panel.querySelector("#prop-img-border-width")?.addEventListener("input", (e) => {
+      const layer = this._canvas.getSelectedLayer();
+      if (!layer || layer.type !== "image") return;
+      this._canvas.updateLayer(layer.id, { borderWidth: parseFloat(e.target.value) || 1 });
+    });
+
+    panel.querySelector("#prop-img-border-swatch")?.addEventListener("click", () => {
+      const layer = this._canvas.getSelectedLayer();
+      if (!layer || layer.type !== "image") return;
+      this._openPicker(layer.borderColor ?? "#ffffff", async (color) => {
+        if (!color) return;
+        this._canvas.snapshot();
+        this._canvas.updateLayer(layer.id, { borderColor: color });
+        const swatch = document.getElementById("prop-img-border-swatch");
+        if (swatch) swatch.querySelector(".swatch-fill").style.background = color;
+      });
     });
 
     panel.querySelector("#prop-text-has-border")?.addEventListener("change", (e) => {
