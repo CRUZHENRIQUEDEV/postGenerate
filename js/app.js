@@ -140,6 +140,7 @@ class App {
 
     const canvasEl = document.getElementById("post-canvas");
     this.canvas = new CanvasEngine(canvasEl);
+    this._canvasPreviewZoom = 1;
     this.exporter = new ExportEngine(this.canvas);
     this.brands = new BrandManager();
     await this.brands.init();
@@ -309,6 +310,7 @@ class App {
       slides: this.slides,
       anim: this.anim,
       onFitCanvas: () => this._fitCanvas(),
+      adjustZoom: (delta) => this._adjustCanvasPreviewZoom(delta),
     });
 
     this._slideCaptionController = new SlideCaptionController({
@@ -410,6 +412,11 @@ class App {
     this.canvas.setPreviewSize(availW, availH);
     this.canvas.setPreviewZoom(this._canvasPreviewZoom);
     document.getElementById("zoom-badge").textContent = `${Math.round(this.canvas.getScale() * 100)}%`;
+  }
+
+  _adjustCanvasPreviewZoom(delta) {
+    this._canvasPreviewZoom = Math.max(0.25, Math.min(3, Number(this._canvasPreviewZoom || 1) + Number(delta || 0)));
+    this._fitCanvas();
   }
 
   _updateFormatBadge(fmtId) {

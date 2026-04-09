@@ -5,12 +5,12 @@
 import { toast } from "../app.js";
 
 export class AnimationPanelController {
-  constructor({ canvas, slides, anim, onFitCanvas }) {
+  constructor({ canvas, slides, anim, onFitCanvas, adjustZoom }) {
     this._canvas = canvas;
     this._slides = slides;
     this._anim = anim;
     this._onFitCanvas = onFitCanvas;
-    this._canvasPreviewZoom = 1;
+    this._adjustZoom = adjustZoom;
   }
 
   wire() {
@@ -71,11 +71,7 @@ export class AnimationPanelController {
   }
 
   _adjustCanvasPreviewZoom(delta) {
-    this._canvasPreviewZoom = Math.max(
-      0.25,
-      Math.min(3, Number(this._canvasPreviewZoom || 1) + Number(delta || 0)),
-    );
-    this._onFitCanvas();
+    this._adjustZoom?.(delta);
   }
 
   async _applyCurrentBgToAllSlides() {
