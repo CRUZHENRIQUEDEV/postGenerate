@@ -504,6 +504,58 @@ ${prompt}
       plan: this._normalizePlan(p.plan, fallbackFormatId),
     };
   }
+
+  async generateFromLayout({ layout, topic, tone = "profissional", provider, model, endpoint, apiKey }) {
+    const results = {};
+    const slots = layout?.slots || [];
+
+    for (const slot of slots) {
+      if (slot.type !== "text") continue;
+      if (!slot.required && Math.random() > 0.7) continue;
+
+      const slotPrompt = this._buildSlotPrompt(slot, topic, tone);
+      try {
+        const req = this._buildRequest({
+          provider,
+          model,
+          endpoint,
+          apiKey,
+          finalPrompt: slotPrompt,
+          temperature: 0.8,
+        });
+        const { data } = await this._requestWithFallback(req);
+        this._assertProviderSuccess(data);
+        let text = this._extractText(data);
+        if (slot.maxChars && text.length > slot.maxChars) {
+          text = text.substring(0, slot.maxChars - 3) + "...";
+        }
+        results[slot.id] = {
+          content: text,
+          maxChars: slot.maxChars,
+          truncated: slot.maxChars ? text.length > slot.maxChars : false,
+          slotId: slot.id,
+        };
+      } catch (e) {
+        console.warn(`Slot ${slot.id} failed:`, e);
+        results[slot.id] = {
+          content: `{${slot.name}}`,
+          maxChars: slot.maxChars,
+          truncated: false,
+          slotId: slot.id,
+          error: e.message,
+        };
+      }
+    }
+
+    return results;
+  }
+
+  _buildSlotPrompt(slot, topic, tone) {
+    let prompt = slot.aiPrompt || `Gere ${slot.name} sobre ${topic}`;
+    prompt = prompt.replace(/\{topic\}/g, topic).replace(/\{tone\}/g, tone);
+    if (slot.maxChars) prompt += ` (máximo ${slot.maxChars} caracteres)`;
+    return prompt;
+  }
 }
 
 export const aiEngine = new AIEngine();

@@ -200,6 +200,53 @@ export const FORMATS = {
     icon: '✏️',
     category: 'custom',
   },
+
+  /* ── Presentation / Slides ── */
+  'slide-16-9': {
+    label: 'Slide 16:9',
+    platform: 'presentation',
+    platformLabel: 'Apresentação',
+    width: 1920,
+    height: 1080,
+    icon: '🖥️',
+    category: 'presentation',
+  },
+  'slide-16-10': {
+    label: 'Slide 16:10',
+    platform: 'presentation',
+    platformLabel: 'Apresentação',
+    width: 1280,
+    height: 800,
+    icon: '🖥️',
+    category: 'presentation',
+  },
+  'slide-4-3': {
+    label: 'Slide 4:3',
+    platform: 'presentation',
+    platformLabel: 'Apresentação',
+    width: 1024,
+    height: 768,
+    icon: '🖥️',
+    category: 'presentation',
+  },
+  'slide-a4': {
+    label: 'Slide A4',
+    platform: 'presentation',
+    platformLabel: 'Apresentação',
+    width: 1123,
+    height: 794,
+    icon: '🖥️',
+    category: 'presentation',
+  },
+  'slide-square': {
+    label: 'Slide Quadrado',
+    platform: 'presentation',
+    platformLabel: 'Apresentação',
+    width: 1080,
+    height: 1080,
+    icon: '◼️',
+    category: 'presentation',
+  },
 }
 
 export const FORMAT_GROUPS = [
@@ -250,6 +297,12 @@ export const FORMAT_GROUPS = [
     label: 'WhatsApp',
     icon: '💬',
     formats: ['whatsapp-status'],
+  },
+  {
+    id: 'presentation',
+    label: 'Apresentação',
+    icon: '🖥️',
+    formats: ['slide-16-9', 'slide-16-10', 'slide-4-3', 'slide-a4', 'slide-square'],
   },
   {
     id: 'custom',

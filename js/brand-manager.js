@@ -4,6 +4,8 @@
    Handles: brand colors, fonts, logos quick-access.
    ============================================================ */
 
+const uuid = () => (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`);
+
 import {
   BrandsDB,
   FontsDB,

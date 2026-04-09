@@ -13,6 +13,7 @@ const DB_NAME = "PostGenerateDB";
 const DB_VERSION = 4;
 
 let _db = null;
+const uuid = () => (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`);
 
 /* ── Open / upgrade ─────────────────────────────────────── */
 export function openDB() {
@@ -146,7 +147,7 @@ export const BrandsDB = {
   save: (brand) => {
     const now = new Date().toISOString();
     return put("brands", {
-      id: brand.id ?? crypto.randomUUID(),
+      id: brand.id ?? uuid(),
       name: brand.name ?? "Nova Marca",
       description: brand.description ?? "",
       logo: brand.logo ?? null, // base64 or null
@@ -177,7 +178,7 @@ export const FontsDB = {
   save: (font) => {
     const now = new Date().toISOString();
     return put("fonts", {
-      id: font.id ?? crypto.randomUUID(),
+      id: font.id ?? uuid(),
       name: font.name ?? "Fonte",
       family: font.family ?? "Inter", // CSS font-family name
       source: font.source ?? "google", // 'google' | 'upload' | 'system'
@@ -205,7 +206,7 @@ export const AssetsDB = {
   save: (asset) => {
     const now = new Date().toISOString();
     return put("assets", {
-      id: asset.id ?? crypto.randomUUID(),
+      id: asset.id ?? uuid(),
       name: asset.name ?? "Asset",
       type: asset.type ?? "logo", // 'logo' | 'icon' | 'element' | 'photo'
       data: asset.data ?? null, // base64 string
@@ -232,7 +233,7 @@ export const ColorsDB = {
   save: (color) => {
     const now = new Date().toISOString();
     return put("colors", {
-      id: color.id ?? crypto.randomUUID(),
+      id: color.id ?? uuid(),
       name: color.name ?? "",
       hex: color.hex ?? "#000000",
       brandId: color.brandId ?? null,
@@ -257,7 +258,7 @@ export const PresetsDB = {
   save: (preset) => {
     const now = new Date().toISOString();
     return put("presets", {
-      id: preset.id ?? crypto.randomUUID(),
+      id: preset.id ?? uuid(),
       name: preset.name ?? "Preset sem nome",
       formatId: preset.formatId ?? "ig-feed-square",
       state: preset.state ?? null, // JSON serialized canvas state
@@ -291,7 +292,7 @@ export const PostHistoryDB = {
   save: (entry) => {
     const now = new Date().toISOString();
     return put("postHistory", {
-      id: entry.id ?? crypto.randomUUID(),
+      id: entry.id ?? uuid(),
       brandId: entry.brandId ?? null,
       name: entry.name ?? "Post",
       formatId: entry.formatId ?? "ig-feed-square",
@@ -315,7 +316,7 @@ export const ProjectsDB = {
   save: (project) => {
     const now = new Date().toISOString();
     return put("projects", {
-      id: project.id ?? crypto.randomUUID(),
+      id: project.id ?? uuid(),
       name: project.name ?? "Projeto sem nome",
       brandId: project.brandId ?? null,
       mode: project.mode ?? "slides",
@@ -340,7 +341,7 @@ export const AIConfigDB = {
   save: (config) => {
     const now = new Date().toISOString();
     return put("aiConfig", {
-      id: config.id ?? crypto.randomUUID(),
+      id: config.id ?? uuid(),
       brandId: config.brandId ?? null,
       provider: config.provider ?? "minimax",
       model: config.model ?? "MiniMax-M1",
@@ -365,7 +366,7 @@ export const BrandDocsDB = {
   save: (doc) => {
     const now = new Date().toISOString();
     return put("brandDocs", {
-      id: doc.id ?? crypto.randomUUID(),
+      id: doc.id ?? uuid(),
       brandId: doc.brandId ?? null,
       name: doc.name ?? "Documento",
       mimeType: doc.mimeType ?? "text/plain",

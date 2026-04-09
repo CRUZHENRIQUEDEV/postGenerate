@@ -2,315 +2,23 @@
    PostGenerate — Canvas Engine v2
    ============================================================ */
 
+import { uuid, injectAnimCSS, ANIM_DEFAULTS } from "./canvas-utils.js";
+import {
+  createDefaultState,
+  makeBadgeLayer,
+  makeHeadlineLayer,
+  makeSubLayer,
+  makeTextLayer,
+  makeImageLayer,
+  makeIconLayer,
+  makeShapeLayer,
+} from "./layer-factories.js";
 import { getFormat } from "./formats.js";
 
-/* ── Animation CSS (injected once) ──────────────────────── */
-const ANIM_CSS_ID = "pg-anim-styles";
-export function injectAnimCSS() {
-  if (document.getElementById(ANIM_CSS_ID)) return;
-  const s = document.createElement("style");
-  s.id = ANIM_CSS_ID;
-  s.textContent = `
-    @keyframes pg-fade    { from { opacity:0 } to { opacity:1 } }
-    @keyframes pg-slide-up    { from { opacity:0; transform:translateY(6%)  } to { opacity:1; transform:translateY(0) } }
-    @keyframes pg-slide-down  { from { opacity:0; transform:translateY(-6%) } to { opacity:1; transform:translateY(0) } }
-    @keyframes pg-slide-left  { from { opacity:0; transform:translateX(-8%)} to { opacity:1; transform:translateX(0) } }
-    @keyframes pg-slide-right { from { opacity:0; transform:translateX(8%) } to { opacity:1; transform:translateX(0) } }
-    @keyframes pg-scale   { from { opacity:0; transform:scale(0.82) } to { opacity:1; transform:scale(1) } }
-    @keyframes pg-blur-in { from { opacity:0; filter:blur(18px) }    to { opacity:1; filter:blur(0) } }
-    @keyframes pg-bounce  { 0%{opacity:0;transform:scale(0.6)} 60%{transform:scale(1.08)} 80%{transform:scale(0.96)} 100%{opacity:1;transform:scale(1)} }
-    @keyframes pg-move-up { from { opacity:0; transform:translateY(14%) } to { opacity:1; transform:translateY(0) } }
-    @keyframes pg-move-down { from { opacity:0; transform:translateY(-14%) } to { opacity:1; transform:translateY(0) } }
-    @keyframes pg-move-left { from { opacity:0; transform:translateX(-14%) } to { opacity:1; transform:translateX(0) } }
-    @keyframes pg-move-right { from { opacity:0; transform:translateX(14%) } to { opacity:1; transform:translateX(0) } }
-    @keyframes pg-rotate-in { from { opacity:0; transform:rotate(-12deg) scale(0.84) } to { opacity:1; transform:rotate(0deg) scale(1) } }
-
-    @keyframes pg-fade-out    { from { opacity:1 } to { opacity:0 } }
-    @keyframes pg-slide-up-out    { from { opacity:1; transform:translateY(0) } to { opacity:0; transform:translateY(-6%) } }
-    @keyframes pg-slide-down-out  { from { opacity:1; transform:translateY(0) } to { opacity:0; transform:translateY(6%) } }
-    @keyframes pg-slide-left-out  { from { opacity:1; transform:translateX(0)} to { opacity:0; transform:translateX(-8%)} }
-    @keyframes pg-slide-right-out { from { opacity:1; transform:translateX(0) } to { opacity:0; transform:translateX(8%) } }
-    @keyframes pg-scale-out   { from { opacity:1; transform:scale(1) } to { opacity:0; transform:scale(0.82) } }
-    @keyframes pg-blur-out { from { opacity:1; filter:blur(0) }    to { opacity:0; filter:blur(18px) } }
-    @keyframes pg-bounce-out  { 0%{opacity:1;transform:scale(1)} 20%{transform:scale(0.9)} 40%{transform:scale(1.02)} 60%{transform:scale(0.96)} 80%{transform:scale(1.02)} 100%{opacity:0;transform:scale(0.6)} }
-    @keyframes pg-move-up-out { from { opacity:1; transform:translateY(0) } to { opacity:0; transform:translateY(-14%) } }
-    @keyframes pg-move-down-out { from { opacity:1; transform:translateY(0) } to { opacity:0; transform:translateY(14%) } }
-    @keyframes pg-move-left-out { from { opacity:1; transform:translateX(0) } to { opacity:0; transform:translateX(-14%) } }
-    @keyframes pg-move-right-out { from { opacity:1; transform:translateX(0) } to { opacity:0; transform:translateX(14%) } }
-    @keyframes pg-rotate-out { from { opacity:1; transform:rotate(0deg) scale(1) } to { opacity:0; transform:rotate(12deg) scale(0.84) } }
-
-    .pg-layer.pg-playing[data-anim]:not([data-anim="none"]) {
-      animation-fill-mode: both;
-      animation-timing-function: cubic-bezier(0.22,1,0.36,1);
-    }
-    .pg-layer.pg-playing[data-anim-out]:not([data-anim-out="none"]) {
-      animation-fill-mode: both;
-      animation-timing-function: cubic-bezier(0.22,1,0.36,1);
-    }
-    .pg-layer.pg-paused { opacity: 0 !important; }
-  `;
-  document.head.appendChild(s);
-}
-
-/* ── Shared anim defaults ───────────────────────────────── */
 export { ANIM_DEFAULTS };
-const ANIM_DEFAULTS = {
-  animIn: "none",
-  animDuration: 0.65,
-  animDelay: 0,
-  animEasing: "cubic-bezier(0.22,1,0.36,1)",
-  animOut: "none",
-  animOutDuration: 0.65,
-  animOutDelay: 0,
-};
 
-/* ── Default state ──────────────────────────────────────── */
-export function createDefaultState(formatId = "ig-feed-square") {
-  return {
-    formatId,
-    background: {
-      type: "solid",
-      color: "#000000",
-      gradient: {
-        type: "linear",
-        from: "#000000",
-        to: "#0e1a2e",
-        angle: 135,
-        fromReach: 0,
-        toReach: 100,
-        reach: 100,
-        opacity: 100,
-        fromOpacity: 100,
-        toOpacity: 100,
-      },
-      image: null,
-      imageSize: "cover",
-    },
-    layers: [
-      makeBadgeLayer("layer-badge", "Badge", "Simple Bridge"),
-      makeHeadlineLayer(
-        "layer-headline",
-        "Headline",
-        "Modelar pontes\nnunca foi\ntão rápido.",
-      ),
-      makeSubLayer(
-        "layer-sub",
-        "Subtítulo",
-        "Do levantamento de campo ao modelo 3D completo\n— com quantitativos, insumos para orçamento\ne exportação IFC gerados em segundos.",
-      ),
-    ],
-  };
-}
-
-/* ── Layer factories ────────────────────────────────────── */
-export function makeBadgeLayer(id, name, content = "Badge") {
-  return {
-    id: id ?? crypto.randomUUID(),
-    name: name ?? "Badge",
-    type: "text",
-    subtype: "badge",
-    visible: true,
-    locked: false,
-    x: 8.5,
-    y: 9.5,
-    width: "auto",
-    content,
-    fontFamily: "-apple-system",
-    fontSize: 2.1,
-    fontWeight: 500,
-    fontStyle: "normal",
-    color: "#7BC4EC",
-    textAlign: "left",
-    lineHeight: 1.2,
-    letterSpacing: "0.07em",
-    textTransform: "none",
-    opacity: 1,
-    /* Badge border */
-    badgeBg: "transparent",
-    badgeBorderColor: "rgba(123,196,236,0.4)",
-    badgeBorderWidth: 1,
-    badgeBorderRadius: 100,
-    badgePaddingX: 1.1,
-    badgePaddingY: 0.33,
-    ...ANIM_DEFAULTS,
-    animIn: "fade",
-    animDelay: 0,
-  };
-}
-
-export function makeHeadlineLayer(id, name, content = "Título\nPrincipal") {
-  return {
-    id: id ?? crypto.randomUUID(),
-    name: name ?? "Headline",
-    type: "text",
-    subtype: "headline",
-    visible: true,
-    locked: false,
-    x: 8.5,
-    y: 18,
-    width: 75,
-    content,
-    fontFamily: "-apple-system",
-    fontSize: 9.0,
-    fontWeight: 800,
-    fontStyle: "normal",
-    color: "#ffffff",
-    textAlign: "left",
-    lineHeight: 1.02,
-    letterSpacing: "-0.03em",
-    textTransform: "none",
-    opacity: 1,
-    /* Box border */
-    hasBorder: false,
-    borderColor: "rgba(255,255,255,0.3)",
-    borderWidth: 2,
-    borderRadius: 8,
-    borderPaddingX: 32,
-    borderPaddingY: 16,
-    ...ANIM_DEFAULTS,
-    animIn: "slide-left",
-    animDelay: 0.1,
-  };
-}
-
-export function makeSubLayer(id, name, content = "Texto de suporte aqui.") {
-  return {
-    id: id ?? crypto.randomUUID(),
-    name: name ?? "Subtítulo",
-    type: "text",
-    subtype: "sub",
-    visible: true,
-    locked: false,
-    x: 8.5,
-    y: 68,
-    width: 62,
-    content,
-    fontFamily: "-apple-system",
-    fontSize: 2.3,
-    fontWeight: 400,
-    fontStyle: "normal",
-    color: "rgba(255,255,255,0.62)",
-    textAlign: "left",
-    lineHeight: 1.55,
-    letterSpacing: "0.01em",
-    textTransform: "none",
-    opacity: 1,
-    hasBorder: false,
-    borderColor: "rgba(255,255,255,0.2)",
-    borderWidth: 1,
-    borderRadius: 6,
-    borderPaddingX: 16,
-    borderPaddingY: 8,
-    ...ANIM_DEFAULTS,
-    animIn: "slide-up",
-    animDelay: 0.22,
-  };
-}
-
-export function makeTextLayer(id, name) {
-  return {
-    id: id ?? crypto.randomUUID(),
-    name: name ?? "Texto",
-    type: "text",
-    subtype: "body",
-    visible: true,
-    locked: false,
-    x: 8.5,
-    y: 50,
-    width: 65,
-    content: "Novo texto",
-    fontFamily: "-apple-system",
-    fontSize: 3.5,
-    fontWeight: 400,
-    fontStyle: "normal",
-    color: "#ffffff",
-    textAlign: "left",
-    lineHeight: 1.4,
-    letterSpacing: "0em",
-    textTransform: "none",
-    opacity: 1,
-    hasBorder: false,
-    borderColor: "rgba(255,255,255,0.3)",
-    borderWidth: 1,
-    borderRadius: 6,
-    borderPaddingX: 16,
-    borderPaddingY: 8,
-    ...ANIM_DEFAULTS,
-  };
-}
-
-export function makeImageLayer(id, name, src) {
-  return {
-    id: id ?? crypto.randomUUID(),
-    name: name ?? "Imagem",
-    type: "image",
-    subtype: "image",
-    visible: true,
-    locked: false,
-    x: 50,
-    y: 20,
-    width: 40,
-    height: 40,
-    src: src ?? "",
-    objectFit: "contain",
-    imageZoom: 1,
-    opacity: 1,
-    hasBorder: false,
-    borderColor: "rgba(255,255,255,0.28)",
-    borderWidth: 2,
-    borderRadius: 0,
-    ...ANIM_DEFAULTS,
-    animIn: "scale",
-  };
-}
-
-export function makeIconLayer(id, name, iconId = "", svg = "") {
-  return {
-    id: id ?? crypto.randomUUID(),
-    name: name ?? "Ícone",
-    type: "icon",
-    subtype: "icon",
-    visible: true,
-    locked: false,
-    x: 40,
-    y: 40,
-    size: 8, // % of canvas width
-    iconId, // e.g. 'ph:star-bold'
-    svg, // raw SVG string (already using currentColor)
-    color: "#ffffff",
-    background: "transparent",
-    hasBorder: false,
-    borderColor: "rgba(255,255,255,0.32)",
-    borderWidth: 1,
-    borderRadius: 12,
-    opacity: 1,
-    ...ANIM_DEFAULTS,
-    animIn: "scale",
-  };
-}
-
-export function makeShapeLayer(id, name) {
-  return {
-    id: id ?? crypto.randomUUID(),
-    name: name ?? "Forma",
-    type: "shape",
-    subtype: "rect",
-    visible: true,
-    locked: false,
-    x: 8.5,
-    y: 85,
-    width: 15,
-    height: 0.4,
-    fillColor: "#7BC4EC",
-    strokeColor: "transparent",
-    strokeWidth: 0,
-    borderRadius: 100,
-    opacity: 1,
-    ...ANIM_DEFAULTS,
-    animIn: "slide-left",
-    animDelay: 0.05,
-  };
-}
+/* ── Re-export factories for external use ─────────────── */
+export { createDefaultState, makeBadgeLayer, makeHeadlineLayer, makeSubLayer, makeTextLayer, makeImageLayer, makeIconLayer, makeShapeLayer };
 
 /* ── Canvas Engine ──────────────────────────────────────── */
 export class CanvasEngine {
@@ -396,7 +104,7 @@ export class CanvasEngine {
     const maxX = Math.max(...layers.map(l => (l.x ?? 0) + (l.width === "auto" ? 0 : (l.width ?? 0))));
     const maxY = Math.max(...layers.map(l => (l.y ?? 0) + (l.height === "auto" ? 0 : (l.height ?? 0))));
     this.snapshot();
-    const groupId = crypto.randomUUID();
+    const groupId = uuid();
     const group = {
       id: groupId,
       name: "Grupo",
@@ -428,7 +136,7 @@ export class CanvasEngine {
     const children = group.children ?? [];
     this._state.layers = this._state.layers.filter(l => l.id !== groupId);
     children.forEach(child => {
-      const restored = { ...child, id: crypto.randomUUID() };
+      const restored = { ...child, id: uuid() };
       this._state.layers.push(restored);
     });
     this._selectedIds.clear();
@@ -549,7 +257,7 @@ export class CanvasEngine {
     const src = this._state.layers.find((l) => l.id === id);
     if (!src) return;
     const clone = structuredClone(src);
-    clone.id = crypto.randomUUID();
+    clone.id = uuid();
     clone.name = src.name + " (cópia)";
     clone.x = (src.x ?? 0) + 2;
     clone.y = (src.y ?? 0) + 2;
@@ -1075,10 +783,19 @@ export class CanvasEngine {
       const img = document.createElement("img");
       img.src = layer.src;
       img.crossOrigin = "anonymous";
-      img.style.cssText = `width:100%;height:100%;object-fit:${layer.objectFit ?? "contain"};display:block;`;
+      img.style.cssText = `width:100%;height:100%;object-fit:${layer.objectFit ?? "cover"};display:block;`;
       img.style.transform = `scale(${Math.max(0.2, Math.min(4, layer.imageZoom ?? 1))})`;
       img.style.transformOrigin = "center center";
       img.style.pointerEvents = "none";
+      const hasCrop = layer.cropX != null || layer.cropY != null || layer.cropW != null || layer.cropH != null;
+      if (hasCrop) {
+        const cropX = layer.cropX ?? 0;
+        const cropY = layer.cropY ?? 0;
+        const cropW = layer.cropW ?? 100;
+        const cropH = layer.cropH ?? 100;
+        img.style.clipPath = `inset(${cropY}% ${100 - cropW - cropX}% ${100 - cropH - cropY}% ${cropX}% round ${((layer.borderRadius ?? 0) * cw) / 100}px)`;
+        img.style.transform = `scale(${Math.max(0.2, Math.min(4, layer.imageZoom ?? 1))})`;
+      }
       el.appendChild(img);
     }
   }
