@@ -764,12 +764,7 @@ export class CanvasEngine {
     el.style.height = `${((layer.height ?? 40) * ch) / 100}px`;
     el.style.overflow = "hidden";
     el.style.borderRadius = `${((layer.borderRadius ?? 0) * cw) / 100}px`;
-    if (layer.hasBorder) {
-      const bw = ((layer.borderWidth ?? 2) * cw) / 1080;
-      el.style.border = `${bw}px solid ${layer.borderColor ?? "rgba(255,255,255,0.28)"}`;
-    } else {
-      el.style.border = "none";
-    }
+    el.style.border = "none";
     // Shadow
     if (layer.boxShadow) {
       const s = layer.boxShadow;

@@ -165,10 +165,8 @@ export class PropertiesPanelController {
     this._originalImageSrc = layer.src ?? null;
     const colorSwatch = document.getElementById("prop-img-color-swatch");
     if (colorSwatch) colorSwatch.style.background = "transparent";
-    const hasBorder = document.getElementById("prop-img-has-border");
-    if (hasBorder) hasBorder.checked = !!layer.hasBorder;
-    this._setSwatch("prop-img-border-swatch", layer.borderColor ?? "rgba(255,255,255,0.28)");
-    this._setVal("prop-img-border-width", layer.borderWidth ?? 2);
+    this._setVal("prop-img-outline-width", 2);
+    this._setSwatch("prop-img-outline-swatch", "#ffffff");
   }
 
   _fillShapeControls(layer) {
@@ -688,27 +686,28 @@ export class PropertiesPanelController {
       if (swatch) swatch.style.background = "transparent";
     });
 
-    panel.querySelector("#prop-img-has-border")?.addEventListener("change", (e) => {
+    panel.querySelector("#btn-img-apply-outline")?.addEventListener("click", async () => {
       const layer = this._canvas.getSelectedLayer();
-      if (!layer || layer.type !== "image") return;
-      this._canvas.snapshot();
-      this._canvas.updateLayer(layer.id, { hasBorder: e.target.checked });
-    });
-
-    panel.querySelector("#prop-img-border-width")?.addEventListener("input", (e) => {
-      const layer = this._canvas.getSelectedLayer();
-      if (!layer || layer.type !== "image") return;
-      this._canvas.updateLayer(layer.id, { borderWidth: parseFloat(e.target.value) || 1 });
-    });
-
-    panel.querySelector("#prop-img-border-swatch")?.addEventListener("click", () => {
-      const layer = this._canvas.getSelectedLayer();
-      if (!layer || layer.type !== "image") return;
-      this._openPicker(layer.borderColor ?? "#ffffff", async (color) => {
-        if (!color) return;
+      if (!layer || layer.type !== "image" || !layer.src) return;
+      const widthInput = document.getElementById("prop-img-outline-width");
+      const swatch = document.getElementById("prop-img-outline-swatch");
+      const thickness = parseInt(widthInput?.value ?? 2) || 2;
+      const fill = swatch?.querySelector(".swatch-fill");
+      const outlineColor = fill?.style.background || "#ffffff";
+      try {
         this._canvas.snapshot();
-        this._canvas.updateLayer(layer.id, { borderColor: color });
-        const swatch = document.getElementById("prop-img-border-swatch");
+        const outlined = await this._imageColorService.addOutlineToPNG(layer.src, outlineColor, thickness);
+        this._canvas.updateLayer(layer.id, { src: outlined });
+        this._toast("Contorno aplicado.", "success");
+      } catch (e) {
+        this._toast("Erro ao aplicar contorno.", "error");
+      }
+    });
+
+    panel.querySelector("#prop-img-outline-swatch")?.addEventListener("click", () => {
+      this._openPicker("#ffffff", async (color) => {
+        if (!color) return;
+        const swatch = document.getElementById("prop-img-outline-swatch");
         if (swatch) swatch.querySelector(".swatch-fill").style.background = color;
       });
     });

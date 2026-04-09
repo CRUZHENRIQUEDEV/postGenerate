@@ -1626,30 +1626,23 @@
               </div>
             </div>
 
-            <div class="prop-section-title" style="margin-top:8px;">Contorno</div>
-            <div class="prop-row">
-              <span class="prop-label">Ativar</span>
-              <div class="prop-controls">
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px;">
-                  <input id="prop-img-has-border" type="checkbox" />
-                </label>
-              </div>
-            </div>
-            <div class="prop-row">
-              <span class="prop-label">Cor</span>
-              <div class="prop-controls">
-                <button id="prop-img-border-swatch" class="color-swatch-btn">
-                  <div class="swatch-fill" style="background: rgba(255,255,255,0.28)"></div>
-                </button>
-              </div>
-            </div>
+            <div class="prop-section-title" style="margin-top:8px;">Contorno nas Formas</div>
             <div class="prop-row">
               <span class="prop-label">Espessura</span>
               <div class="prop-controls">
                 <div class="num-input" style="flex:1">
-                  <input id="prop-img-border-width" type="number" min="0.5" max="20" step="0.5" value="2" />
+                  <input id="prop-img-outline-width" type="number" min="1" max="10" step="1" value="2" />
                   <span class="num-input-unit">px</span>
                 </div>
+              </div>
+            </div>
+            <div class="prop-row">
+              <span class="prop-label">Cor</span>
+              <div class="prop-controls" style="display:flex;gap:6px;align-items:center;">
+                <button id="prop-img-outline-swatch" class="color-swatch-btn">
+                  <div class="swatch-fill" style="background: #ffffff"></div>
+                </button>
+                <button id="btn-img-apply-outline" class="btn btn-xs" style="font-size:10px;">Aplicar</button>
               </div>
             </div>
 

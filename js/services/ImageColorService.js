@@ -91,6 +91,62 @@ export class ImageColorService {
     });
   }
 
+  async addOutlineToPNG(dataUrl, outlineColor, thickness = 2) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+
+        const w = img.width, h = img.height;
+        const origData = ctx.getImageData(0, 0, w, h);
+        const pixels = origData.data;
+
+        const isFilled = (x, y) => {
+          if (x < 0 || x >= w || y < 0 || y >= h) return false;
+          return pixels[(y * w + x) * 4 + 3] > 10;
+        };
+
+        const hexColor = this._colorToHex(outlineColor);
+        const outR = parseInt(hexColor.slice(1, 3), 16);
+        const outG = parseInt(hexColor.slice(3, 5), 16);
+        const outB = parseInt(hexColor.slice(5, 7), 16);
+
+        const edgePixels = new Set();
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (!isFilled(x, y)) continue;
+            for (let tx = -thickness; tx <= thickness; tx++) {
+              for (let ty = -thickness; ty <= thickness; ty++) {
+                if (tx === 0 && ty === 0) continue;
+                if (!isFilled(x + tx, y + ty)) {
+                  edgePixels.add(y * w + x);
+                  break;
+                }
+              }
+              if (edgePixels.has(y * w + x)) break;
+            }
+          }
+        }
+
+        for (const idx of edgePixels) {
+          const i = idx * 4;
+          pixels[i] = outR;
+          pixels[i + 1] = outG;
+          pixels[i + 2] = outB;
+        }
+
+        ctx.putImageData(origData, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+  }
+
   async recolorImage(imageDataUrl, newColor, options = {}) {
     const { opacity = 1.0 } = options;
     if (imageDataUrl.startsWith("data:image/svg")) {
@@ -129,6 +185,18 @@ export class ImageColorService {
       img.onerror = reject;
       img.src = imageDataUrl;
     });
+  }
+
+  _colorToHex(color) {
+    if (!color) return "#ffffff";
+    if (color.startsWith("#")) return color.slice(0, 7);
+    if (color.startsWith("rgb")) {
+      const m = color.match(/\d+/g);
+      if (m && m.length >= 3) {
+        return "#" + [m[0], m[1], m[2]].map(v => parseInt(v).toString(16).padStart(2, "0")).join("");
+      }
+    }
+    return "#ffffff";
   }
 
   _escapeRegex(str) {
