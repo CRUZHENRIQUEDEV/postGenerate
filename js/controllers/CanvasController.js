@@ -4,6 +4,7 @@
 
 import { openFilePicker } from "../utils/ui-helpers.js";
 import { BrandManager } from "../brand-manager.js";
+import { imageTrimService } from "../services/ImageTrimService.js";
 
 export class CanvasController {
   constructor({
@@ -82,8 +83,14 @@ export class CanvasController {
     document.getElementById("btn-add-image")?.addEventListener("click", () => {
       openFilePicker("image/*", async (file) => {
         const b64 = await BrandManager.readFileAsBase64(file);
+        const trimmed = await imageTrimService.trimPNG(b64);
+        const state = this._canvas.getState();
+        const fitted = await imageTrimService.fitImageToLayer(trimmed, 40, 40, state.formatId);
         this._canvas.snapshot();
-        this._canvas.addLayer(this._makeImageLayer(null, file.name, b64));
+        const layer = this._makeImageLayer(null, file.name, fitted.dataUrl);
+        layer.width = fitted.width;
+        layer.height = fitted.height;
+        this._canvas.addLayer(layer);
       });
     });
 

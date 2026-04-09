@@ -26,19 +26,7 @@ export function createDefaultState(formatId = "ig-feed-square") {
       image: null,
       imageSize: "cover",
     },
-    layers: [
-      makeBadgeLayer("layer-badge", "Badge", "Simple Bridge"),
-      makeHeadlineLayer(
-        "layer-headline",
-        "Headline",
-        "Modelar pontes\nnunca foi\ntão rápido.",
-      ),
-      makeSubLayer(
-        "layer-sub",
-        "Subtítulo",
-        "Do levantamento de campo ao modelo 3D completo\n— com quantitativos, insumos para orçamento\ne exportação IFC gerados em segundos.",
-      ),
-    ],
+    layers: [],
   };
 }
 

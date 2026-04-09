@@ -4,6 +4,7 @@
 
 import { setVal, setSwatch, setAlign, openFilePicker as openFilePickerFn } from "../utils/ui-helpers.js";
 import { uuid } from "../utils/ui-helpers.js";
+import { imageColorService } from "../services/ImageColorService.js";
 
 export class PropertiesPanelController {
   constructor({ canvas, picker, openPickerCallback, updateGradientBar, openFilePicker, ColorsDB, toast, slides }) {
@@ -24,6 +25,8 @@ export class PropertiesPanelController {
     this._toast = toast || (() => {});
     this._slides = slides;
     this._layerClipboard = null;
+    this._imageColorService = imageColorService;
+    this._originalImageSrc = null;
   }
 
   wire() {
@@ -159,6 +162,9 @@ export class PropertiesPanelController {
     const zoomVal = document.getElementById("prop-img-zoom-val");
     if (zoomVal) zoomVal.textContent = `${zoom.toFixed(2)}x`;
     this._setVal("prop-opacity", Math.round((layer.opacity ?? 1) * 100));
+    this._originalImageSrc = layer.src ?? null;
+    const colorSwatch = document.getElementById("prop-img-color-swatch");
+    if (colorSwatch) colorSwatch.style.background = "transparent";
   }
 
   _fillShapeControls(layer) {
@@ -650,6 +656,33 @@ export class PropertiesPanelController {
       const zoomVal = document.getElementById("prop-img-zoom-val");
       if (zoomVal) zoomVal.textContent = `${next.toFixed(2)}x`;
       this._canvas.updateLayer(layer.id, { imageZoom: next });
+    });
+
+    panel.querySelector("#btn-img-recolor")?.addEventListener("click", async () => {
+      const layer = this._canvas.getSelectedLayer();
+      if (!layer || layer.type !== "image" || !layer.src) return;
+      this._openPicker("#ffffff", async (color) => {
+        if (!color) return;
+        this._canvas.snapshot();
+        try {
+          const recolored = await this._imageColorService.recolorImage(layer.src, color, { opacity: 1.0 });
+          this._canvas.updateLayer(layer.id, { src: recolored });
+          const swatch = document.getElementById("prop-img-color-swatch");
+          if (swatch) swatch.style.background = color;
+        } catch (e) {
+          this._toast("Erro ao aplicar cor na imagem.", "error");
+        }
+      });
+    });
+
+    panel.querySelector("#btn-img-reset-color")?.addEventListener("click", () => {
+      const layer = this._canvas.getSelectedLayer();
+      if (!layer || layer.type !== "image") return;
+      if (!this._originalImageSrc) return;
+      this._canvas.snapshot();
+      this._canvas.updateLayer(layer.id, { src: this._originalImageSrc });
+      const swatch = document.getElementById("prop-img-color-swatch");
+      if (swatch) swatch.style.background = "transparent";
     });
 
     panel.querySelector("#prop-text-has-border")?.addEventListener("change", (e) => {

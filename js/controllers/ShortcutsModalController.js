@@ -19,7 +19,10 @@ export class ShortcutsModalController {
   }
 
   close() {
-    this._modal?.classList.remove("open");
+    if (this._modal) {
+      this._modal.classList.remove("open");
+      this._modal.style.display = "none";
+    }
   }
 
   _wireShortcutsModal() {
@@ -31,10 +34,10 @@ export class ShortcutsModalController {
       }
     });
     document.getElementById("btn-close-shortcuts-modal")?.addEventListener("click", () => {
-      this._modal?.classList.remove("open");
+      this.close();
     });
     this._modal?.addEventListener("click", (e) => {
-      if (e.target?.id === "shortcuts-modal") this._modal?.classList.remove("open");
+      if (e.target?.id === "shortcuts-modal") this.close();
     });
   }
 }
