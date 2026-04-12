@@ -511,16 +511,11 @@ export class ProjectsHomeController {
     if (!projectId) return;
     const project = await this._projectService.get(projectId);
     if (!project) return;
-    this._currentProjectId = project.id;
-    if (project.brandId) await this._brands.setCurrentBrand(project.brandId);
-    await this._slides.loadSlides(
-      project.slides ?? [],
-      project.activeSlideIndex ?? 0,
-    );
+    const ok = await this._projectService.open(projectId);
+    if (!ok) return;
     this._fitCanvas();
     this._updateFormatBadge(this._canvas.getState().formatId);
     this._updateProjectNameLabel(project.name);
-    this._projectDirty = false;
     this._onShowProjectsHome(false);
   }
 
