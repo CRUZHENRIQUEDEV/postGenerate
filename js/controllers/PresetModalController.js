@@ -39,6 +39,25 @@ export class PresetModalController {
       if (file) this._importPresetJson(file);
       e.target.value = "";
     });
+
+    document.getElementById("btn-preset-delete")?.addEventListener("click", () => this._deleteSelectedPreset());
+  }
+
+  async _deleteSelectedPreset() {
+    const targetId = document.getElementById("preset-save-target")?.value;
+    if (!targetId || targetId === "__new__") return;
+    const preset = this._existingPresets.find((p) => p.id === targetId);
+    if (!preset) return;
+    if (!confirm(`Excluir o preset "${preset.name}"?\n\nSlides vinculados a ele não serão afetados, mas perderão a referência ao preset.`)) return;
+    try {
+      await this._presetService.delete(targetId);
+      this._existingPresets = this._existingPresets.filter((p) => p.id !== targetId);
+      this._renderTargetSelect(null);
+      toast(`Preset "${preset.name}" excluído.`, "success");
+    } catch (e) {
+      toast("Erro ao excluir preset.", "error");
+      console.error(e);
+    }
   }
 
   async _openModal() {
@@ -46,8 +65,13 @@ export class PresetModalController {
     this._existingPresets = await this._presetService.getAll();
     this._modal.style.display = "flex";
     this._modal.classList.add("open");
-    this._renderTargetSelect();
-    this._renderTextFieldsEditor();
+    // auto-select the preset linked to the current slide
+    const activePresetId = this._canvas.getState()?._presetId ?? null;
+    this._renderTargetSelect(activePresetId);
+    const activePreset = activePresetId
+      ? this._existingPresets.find((p) => p.id === activePresetId) ?? null
+      : null;
+    this._renderTextFieldsEditor(activePreset);
     this._renderMediaLayersEditor();
     this._updateBgPreview();
     await this._renderPalettePreview();
@@ -60,7 +84,7 @@ export class PresetModalController {
 
   /* ── Target select ──────────────────────────────────────── */
 
-  _renderTargetSelect() {
+  _renderTargetSelect(autoSelectId = null) {
     const sel = document.getElementById("preset-save-target");
     if (!sel) return;
     sel.innerHTML = `<option value="__new__">✦ Criar novo preset</option>`;
@@ -75,41 +99,48 @@ export class PresetModalController {
       });
       sel.appendChild(grp);
     }
-    this._onTargetChange("__new__");
+    const initial = autoSelectId && this._existingPresets.find((p) => p.id === autoSelectId)
+      ? autoSelectId
+      : "__new__";
+    sel.value = initial;
+    this._onTargetChange(initial);
   }
 
   _onTargetChange(value) {
     const nameRow = document.getElementById("preset-save-name-row");
     const overwriteInfo = document.getElementById("preset-overwrite-info");
     const overwriteName = document.getElementById("preset-overwrite-name");
+    const deleteBtn = document.getElementById("btn-preset-delete");
     const isNew = value === "__new__";
 
     if (nameRow) nameRow.style.display = isNew ? "block" : "none";
+    if (deleteBtn) deleteBtn.style.display = isNew ? "none" : "inline-flex";
 
     if (!isNew) {
       const preset = this._existingPresets.find((p) => p.id === value);
       if (overwriteName) overwriteName.textContent = `"${preset?.name ?? value}"`;
-      if (overwriteInfo) overwriteInfo.style.display = "block";
-      // prefill name field with existing name for reference
-      const nameInput = document.getElementById("preset-save-name-input");
-      if (nameInput && preset) nameInput.value = preset.name;
+      if (overwriteInfo) overwriteInfo.style.display = "flex";
       const descInput = document.getElementById("preset-save-description");
-      if (descInput && preset?.description) descInput.value = preset.description;
+      if (descInput && preset?.description != null) descInput.value = preset.description;
+      // reload text fields with saved hint/maxChars
+      this._renderTextFieldsEditor(preset ?? null);
     } else {
       if (overwriteInfo) overwriteInfo.style.display = "none";
+      this._renderTextFieldsEditor(null);
     }
   }
 
   /* ── Text fields editor ─────────────────────────────────── */
 
-  _renderTextFieldsEditor() {
+  _renderTextFieldsEditor(existingPreset = null) {
     const el = document.getElementById("preset-text-fields-editor");
     const empty = document.getElementById("preset-no-text-fields");
     if (!el) return;
 
     const state = this._canvas.getState();
     const layers = state?.layers?.filter((l) => l?.type === "text") ?? [];
-    const existingFields = this._presetService.extractTextFields(state);
+    // pass existingPreset so saved hint/maxChars/role are loaded from DB
+    const existingFields = this._presetService.extractTextFields(state, existingPreset);
 
     if (!layers.length) {
       el.innerHTML = "";

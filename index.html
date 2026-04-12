@@ -2667,8 +2667,11 @@
             <div id="preset-save-name-row" style="margin-top:8px;">
               <input id="preset-save-name-input" class="input" placeholder="Nome do novo preset" style="width:100%;box-sizing:border-box;" />
             </div>
-            <div id="preset-overwrite-info" style="display:none;margin-top:6px;padding:7px 10px;background:rgba(255,160,0,0.08);border:1px solid rgba(255,160,0,0.3);border-radius:6px;font-size:12px;color:#f0a000;">
-              ⚠ O preset <strong id="preset-overwrite-name"></strong> será substituído. Slides vinculados receberão as novas configurações.
+            <div id="preset-overwrite-info" style="display:none;margin-top:6px;padding:7px 10px;background:rgba(255,160,0,0.08);border:1px solid rgba(255,160,0,0.3);border-radius:6px;font-size:12px;color:#f0a000;align-items:center;justify-content:space-between;gap:8px;">
+              <span>⚠ O preset <strong id="preset-overwrite-name"></strong> será substituído. Slides vinculados receberão as novas configurações.</span>
+              <button id="btn-preset-delete" class="btn btn-ghost btn-sm" style="display:none;color:#e05555;border-color:#e05555;white-space:nowrap;flex-shrink:0;" title="Excluir este preset permanentemente">
+                🗑 Excluir
+              </button>
             </div>
           </div>
 

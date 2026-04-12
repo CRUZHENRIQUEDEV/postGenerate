@@ -22,9 +22,7 @@ export class ProjectService {
 
   _setupAutoSave() {
     this._autoSaveInterval = setInterval(async () => {
-      console.log("[AutoSave] tick", { dirty: this._projectDirty, loading: this._loadingProject, id: this._currentProjectId, readonly: this._shareReadOnly });
       if (this._projectDirty && !this._loadingProject && this._currentProjectId && !this._shareReadOnly) {
-        console.log("[AutoSave] saving...");
         try { await this.save(); } catch (e) { console.error("[AutoSave] error:", e); }
       }
     }, 15000);
