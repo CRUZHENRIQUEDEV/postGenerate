@@ -130,6 +130,25 @@ export class PresetModalController {
     }
   }
 
+  /* ── Font list ──────────────────────────────────────────── */
+
+  _getFontOptions(selected = "") {
+    const BASE_FONTS = [
+      "-apple-system", "Inter", "Roboto", "Montserrat", "Poppins",
+      "Raleway", "Playfair Display", "Oswald", "Lato", "Nunito",
+      "Open Sans", "DM Sans", "Josefin Sans", "Ubuntu", "Source Sans 3",
+    ];
+    // also pull any brand fonts already loaded
+    const brandFontEls = document.querySelectorAll("#prop-font-family option");
+    const extra = Array.from(brandFontEls)
+      .map((o) => o.value)
+      .filter((v) => v && !BASE_FONTS.includes(v));
+    const all = [...BASE_FONTS, ...extra];
+    return all.map((f) =>
+      `<option value="${f}"${f === selected ? " selected" : ""}>${f}</option>`
+    ).join("");
+  }
+
   /* ── Text fields editor ─────────────────────────────────── */
 
   _renderTextFieldsEditor(existingPreset = null) {
@@ -190,8 +209,9 @@ export class PresetModalController {
           </div>
           <div>
             <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">Fonte</div>
-            <input type="text" data-text-field-font="${l.id}" class="input input-sm" value="${fontFamily}" placeholder="Ex: Montserrat" style="width:100%;box-sizing:border-box;"
-              onchange="this._applyTextFieldChange && this._applyTextFieldChange('${l.id}','fontFamily',this.value)" />
+            <select data-text-field-font="${l.id}" class="input input-sm" style="width:100%;">
+              ${this._getFontOptions(fontFamily)}
+            </select>
           </div>
           <div>
             <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;">Tamanho (px)</div>
