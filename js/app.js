@@ -158,6 +158,7 @@ class App {
     this._presetModalController = new PresetModalController({
       presetService: this._presetService,
       canvas: this.canvas,
+      brands: this.brands,
     });
 
     this._ai = new AIService({

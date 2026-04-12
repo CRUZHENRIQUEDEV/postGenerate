@@ -2636,160 +2636,104 @@
     </div>
 
     <div id="preset-save-modal" class="modal-backdrop">
-      <div class="modal" style="width: 620px; max-width: 95vw">
+      <div class="modal" style="width:680px;max-width:96vw;max-height:92vh;display:flex;flex-direction:column;">
         <div class="modal-header">
           <span class="modal-title">Salvar Preset</span>
-          <button id="btn-close-preset-save-modal" class="modal-close">
-            ×
-          </button>
-        </div>
-        <div class="modal-body">
-          <label class="label">Criar novo preset</label>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px">
-            <input
-              id="preset-save-name-input"
-              class="input"
-              placeholder="Nome do novo preset"
-              style="flex: 1"
-            />
-            <button id="btn-preset-save-new" class="btn btn-primary">
-              Salvar Novo
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button id="btn-import-preset-json" class="btn btn-ghost btn-sm" title="Importar preset de arquivo JSON">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Importar JSON
             </button>
+            <input type="file" id="preset-import-file" accept=".json" style="display:none" />
+            <button id="btn-close-preset-save-modal" class="modal-close">×</button>
           </div>
-          <div style="margin-bottom: 10px">
-            <label class="label">Descrição do template (para IA)</label>
-            <input
-              id="preset-save-description"
-              class="input"
+        </div>
+        <div class="modal-body" style="overflow-y:auto;flex:1;padding:16px;display:flex;flex-direction:column;gap:16px;">
+
+          <!-- ① Destino: novo ou sobrescrever -->
+          <div>
+            <label class="label" style="margin-bottom:6px;">
+              Destino
+              <span class="text-muted" style="font-weight:400;font-size:11px;"> — criar novo ou sobrescrever um preset existente</span>
+            </label>
+            <div style="display:flex;gap:8px;align-items:stretch;">
+              <select id="preset-save-target" class="input" style="flex:1;"></select>
+              <button id="btn-preset-save-confirm" class="btn btn-primary" style="white-space:nowrap;">Salvar</button>
+              <button id="btn-export-preset-json" class="btn btn-ghost btn-sm" title="Exportar preset selecionado como JSON" style="white-space:nowrap;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                JSON
+              </button>
+            </div>
+            <div id="preset-save-name-row" style="margin-top:8px;">
+              <input id="preset-save-name-input" class="input" placeholder="Nome do novo preset" style="width:100%;box-sizing:border-box;" />
+            </div>
+            <div id="preset-overwrite-info" style="display:none;margin-top:6px;padding:7px 10px;background:rgba(255,160,0,0.08);border:1px solid rgba(255,160,0,0.3);border-radius:6px;font-size:12px;color:#f0a000;">
+              ⚠ O preset <strong id="preset-overwrite-name"></strong> será substituído. Slides vinculados receberão as novas configurações.
+            </div>
+          </div>
+
+          <!-- ② Descrição -->
+          <div>
+            <label class="label" style="margin-bottom:4px;">
+              Descrição
+              <span class="text-muted" style="font-weight:400;font-size:11px;"> — usada pela IA para entender o propósito deste template</span>
+            </label>
+            <textarea id="preset-save-description" class="input" rows="2"
               placeholder="Ex: Card de dica com título e subtítulo, para Instagram feed"
-            />
+              style="resize:vertical;width:100%;box-sizing:border-box;"></textarea>
           </div>
 
-          <!-- Text layer schema editor -->
-          <div style="margin-bottom: 10px">
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 6px;
-              "
-            >
-              <label class="label" style="margin: 0">Campos de texto</label>
-              <span class="text-xs text-muted"
-                >A IA vai preencher esses campos</span
-              >
-            </div>
-            <div
-              id="preset-text-fields-editor"
-              style="display: grid; gap: 4px; max-height: 180px; overflow: auto"
-            >
-              <!-- Rendered by app.js -->
-            </div>
+          <!-- ③ Campos de texto -->
+          <div>
+            <label class="label" style="margin-bottom:8px;">
+              Campos de texto
+              <span class="text-muted" style="font-weight:400;font-size:11px;"> — a IA preenche estes campos em cada post gerado com este preset</span>
+            </label>
+            <div id="preset-text-fields-editor" style="display:flex;flex-direction:column;gap:12px;max-height:300px;overflow-y:auto;padding-right:2px;"></div>
+            <p id="preset-no-text-fields" style="font-size:12px;color:var(--text-muted);display:none;">Nenhuma camada de texto neste slide.</p>
           </div>
 
-          <!-- Fixed elements (icons, logos, shapes, images) -->
-          <div style="margin-bottom: 10px">
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 6px;
-              "
-            >
-              <label class="label" style="margin: 0"
-                >Elementos fixos do template</label
-              >
-              <span class="text-xs text-muted"
-                >Aplicados em todos os slides</span
-              >
-            </div>
-            <div
-              id="preset-fixed-layers-editor"
-              style="display: grid; gap: 4px; max-height: 140px; overflow: auto"
-            >
-              <!-- Rendered by app.js -->
-            </div>
+          <!-- ④ Imagens e ícones -->
+          <div>
+            <label class="label" style="margin-bottom:4px;">
+              Imagens e ícones
+              <span class="text-muted" style="font-weight:400;font-size:11px;"> — marque os que fazem parte de todo post com este preset</span>
+            </label>
+            <div id="preset-media-layers-editor" style="display:flex;flex-wrap:wrap;gap:8px;min-height:32px;"></div>
+            <p id="preset-no-media-layers" style="font-size:12px;color:var(--text-muted);display:none;">Nenhuma imagem ou ícone neste slide.</p>
           </div>
 
-          <!-- Background section -->
-          <div style="margin-bottom: 10px">
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 6px;
-              "
-            >
-              <label class="label" style="margin: 0">Fundo do preset</label>
-              <label
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 6px;
-                  font-size: 12px;
-                  cursor: pointer;
-                "
-              >
+          <!-- ⑤ Fundo -->
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <label class="label" style="margin:0;">
+                Fundo
+                <span class="text-muted" style="font-weight:400;font-size:11px;"> — aplicado em todos os slides que usam este preset</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
                 <input type="checkbox" id="preset-save-include-bg" checked />
-                Incluir fundo
+                Incluir no preset
               </label>
             </div>
-            <div
-              id="preset-bg-preview"
-              style="
-                font-size: 12px;
-                color: var(--text-muted);
-                padding: 6px 8px;
-                border: 1px solid var(--border);
-                border-radius: 6px;
-              "
-            ></div>
+            <div id="preset-bg-preview" style="font-size:12px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;gap:10px;"></div>
           </div>
 
-          <!-- Version history section -->
-          <div
-            id="preset-version-section"
-            style="display: none; margin-bottom: 10px"
-          >
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 6px;
-              "
-            >
-              <label class="label" style="margin: 0"
-                >Histórico de versões</label
-              >
+          <!-- ⑥ Paleta de cores -->
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <label class="label" style="margin:0;">
+                Paleta de cores da marca
+                <span class="text-muted" style="font-weight:400;font-size:11px;"> — incorporada no preset para consistência visual</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                <input type="checkbox" id="preset-save-include-palette" checked />
+                Incluir paleta
+              </label>
             </div>
-            <div
-              id="preset-version-list"
-              style="display: grid; gap: 4px; max-height: 120px; overflow: auto"
-            ></div>
+            <div id="preset-palette-preview" style="display:flex;flex-wrap:wrap;gap:5px;min-height:24px;"></div>
+            <p id="preset-no-palette" style="font-size:12px;color:var(--text-muted);display:none;">Nenhuma cor na marca atual.</p>
           </div>
 
-          <div class="section-divider"></div>
-
-          <label class="label">Sobrescrever existente</label>
-          <div
-            id="preset-existing-list"
-            style="
-              display: grid;
-              gap: 6px;
-              max-height: 180px;
-              overflow: auto;
-              margin-bottom: 8px;
-            "
-          ></div>
-          <div style="display: flex; gap: 8px">
-            <button id="btn-preset-overwrite-selected" class="btn">
-              Sobrescrever Selecionado
-            </button>
-          </div>
         </div>
       </div>
     </div>

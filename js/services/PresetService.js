@@ -13,9 +13,10 @@ export class PresetService {
     this._brands = brands;
   }
 
-  async save(name, description, textFields, fixedLayerIds) {
+  async save(name, description, textFields, fixedLayerIds, opts = {}) {
+    const { overwriteId = null, includePalette = true } = opts;
     const thumbnail = await this._exporter.generateThumbnail();
-    const state = this._canvas.getState();
+    const state = structuredClone(this._canvas.getState());
     const includeBg = document.getElementById("preset-save-include-bg")?.checked !== false;
     const normalizedBackground = includeBg
       ? this.normalizeBackground(state.background, null)
@@ -37,10 +38,11 @@ export class PresetService {
         animDelay: l.animDelay,
       }));
 
-    const resolvedFixedLayerIds = fixedLayerIds ?? null;
+    const existingPreset = overwriteId ? await PresetsDB.get(overwriteId) : null;
 
     await PresetsDB.save({
-      id: uuid(),
+      ...(existingPreset ?? {}),
+      id: overwriteId ?? uuid(),
       name,
       formatId: state.formatId,
       state,
@@ -49,9 +51,9 @@ export class PresetService {
       ownerBrandId: brandId ?? null,
       description,
       textFields: textFields ?? this.extractTextFields(state),
-      fixedLayerIds: resolvedFixedLayerIds,
+      fixedLayerIds: fixedLayerIds ?? null,
       background: normalizedBackground,
-      brandPalette: brand?.palette ?? [],
+      brandPalette: includePalette ? (brand?.palette ?? []) : [],
       brandPrimaryFont: brand?.primaryFont ?? "",
       brandVoice: brand?.brandVoice ?? "",
       animations: animationSummary,
