@@ -61,7 +61,7 @@ export class ExportEngine {
 
         // If any stop has low opacity, composite over solid fallback to avoid transparency
         if (fromOpacity < 100 || toOpacity < 100) {
-          clone.style.background = g.to;
+          clone.style.background = g.from;
           clone.style.position = "relative";
           const overlay = document.createElement("div");
           overlay.style.cssText = `
