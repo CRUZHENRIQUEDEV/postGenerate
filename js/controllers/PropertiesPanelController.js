@@ -686,6 +686,26 @@ export class PropertiesPanelController {
       if (swatch) swatch.style.background = "transparent";
     });
 
+    panel.querySelector("#btn-img-reset-all")?.addEventListener("click", () => {
+      const layer = this._canvas.getSelectedLayer();
+      if (!layer || layer.type !== "image") return;
+      this._canvas.snapshot();
+      this._canvas.updateLayer(layer.id, {
+        objectFit: "contain",
+        imageZoom: 1,
+        cropX: null, cropY: null, cropW: null, cropH: null,
+        borderRadius: 0,
+        hasBorder: false,
+        opacity: 1,
+        layerBlur: 0,
+        boxShadow: null,
+      });
+      this._fillImageControls({ ...layer, objectFit: "contain", imageZoom: 1, borderRadius: 0, opacity: 1 });
+      this._setVal("prop-opacity", 100);
+      this._setVal("prop-crop-x", 0); this._setVal("prop-crop-y", 0);
+      this._setVal("prop-crop-w", 100); this._setVal("prop-crop-h", 100);
+    });
+
     panel.querySelector("#btn-img-apply-outline")?.addEventListener("click", async () => {
       const layer = this._canvas.getSelectedLayer();
       if (!layer || layer.type !== "image" || !layer.src) return;
