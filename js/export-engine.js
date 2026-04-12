@@ -44,44 +44,8 @@ export class ExportEngine {
 
     // Render state into clone (re-use canvas-engine render logic inline)
     const exportState = structuredClone(state);
-    if (transparent) {
-      // Remove background — let html2canvas handle transparency
-    } else {
-      // Apply background
-      const bg = exportState.background;
-      if (bg.type === "solid") clone.style.background = bg.color;
-      else if (bg.type === "gradient") {
-        const g = bg.gradient;
-        const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
-        const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
-        const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? g.opacity ?? 100));
-        const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? g.opacity ?? 100));
-        const from = this._withOpacity(g.from, fromOpacity);
-        const to = this._withOpacity(g.to, toOpacity);
-
-        // If any stop has low opacity, composite over solid fallback to avoid transparency
-        if (fromOpacity < 100 || toOpacity < 100) {
-          clone.style.background = g.from;
-          clone.style.position = "relative";
-          const overlay = document.createElement("div");
-          overlay.style.cssText = `
-            position: absolute; inset: 0;
-            background: ${
-              g.type === "linear"
-                ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
-                : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`
-            };
-          `;
-          clone.appendChild(overlay);
-        } else {
-          clone.style.background =
-            g.type === "linear"
-              ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
-              : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
-        }
-      } else if (bg.type === "image" && bg.image) {
-        clone.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
-      }
+    if (!transparent) {
+      this._applyBackground(clone, exportState.background);
     }
 
     // Render layers
@@ -102,7 +66,7 @@ export class ExportEngine {
         scale: 1,
         useCORS: true,
         allowTaint: false,
-        backgroundColor: transparent ? null : null,
+        backgroundColor: transparent ? null : (state.background?.color ?? "#000000"),
         logging: false,
       });
 
@@ -143,38 +107,7 @@ export class ExportEngine {
 
     const exportState = structuredClone(state);
     if (!transparent) {
-      const bg = exportState.background;
-      if (bg.type === "solid") clone.style.background = bg.color;
-      else if (bg.type === "gradient") {
-        const g = bg.gradient;
-        const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
-        const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
-        const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? g.opacity ?? 100));
-        const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? g.opacity ?? 100));
-        const from = this._withOpacity(g.from, fromOpacity);
-        const to = this._withOpacity(g.to, toOpacity);
-
-        if (fromOpacity < 100 || toOpacity < 100) {
-          clone.style.background = g.to;
-          clone.style.position = "relative";
-          const overlay = document.createElement("div");
-          overlay.style.cssText = `
-            position: absolute; inset: 0;
-            background: ${
-              g.type === "linear"
-                ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
-                : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`
-            };
-          `;
-          clone.appendChild(overlay);
-        } else {
-          clone.style.background = g.type === "linear"
-            ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
-            : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
-        }
-      } else if (bg.type === "image" && bg.image) {
-        clone.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
-      }
+      this._applyBackground(clone, exportState.background);
     }
 
     for (const layer of exportState.layers) {
@@ -193,7 +126,7 @@ export class ExportEngine {
         scale: 1,
         useCORS: true,
         allowTaint: false,
-        backgroundColor: transparent ? null : "#000000",
+        backgroundColor: transparent ? null : (state.background?.color ?? "#000000"),
         logging: false,
       });
 
@@ -234,38 +167,7 @@ export class ExportEngine {
 
     const exportState = structuredClone(state);
     if (!transparent) {
-      const bg = exportState.background;
-      if (bg.type === "solid") clone.style.background = bg.color;
-      else if (bg.type === "gradient") {
-        const g = bg.gradient;
-        const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
-        const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
-        const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? g.opacity ?? 100));
-        const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? g.opacity ?? 100));
-        const from = this._withOpacity(g.from, fromOpacity);
-        const to = this._withOpacity(g.to, toOpacity);
-
-        if (fromOpacity < 100 || toOpacity < 100) {
-          clone.style.background = g.to;
-          clone.style.position = "relative";
-          const overlay = document.createElement("div");
-          overlay.style.cssText = `
-            position: absolute; inset: 0;
-            background: ${
-              g.type === "linear"
-                ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
-                : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`
-            };
-          `;
-          clone.appendChild(overlay);
-        } else {
-          clone.style.background = g.type === "linear"
-            ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
-            : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
-        }
-      } else if (bg.type === "image" && bg.image) {
-        clone.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
-      }
+      this._applyBackground(clone, exportState.background);
     }
     for (const layer of exportState.layers) {
       if (!layer.visible) continue;
@@ -276,10 +178,13 @@ export class ExportEngine {
     try {
       await document.fonts.ready;
       const xhtml = clone.innerHTML;
+      const bgStyle = clone.style.backgroundColor
+        ? `background-color:${clone.style.backgroundColor};background-image:${clone.style.backgroundImage};`
+        : (clone.style.background ? `background:${clone.style.background};` : "");
       const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${fmt.width}" height="${fmt.height}" viewBox="0 0 ${fmt.width} ${fmt.height}">
   <foreignObject x="0" y="0" width="${fmt.width}" height="${fmt.height}">
-    <div xmlns="http://www.w3.org/1999/xhtml" style="width:${fmt.width}px;height:${fmt.height}px;overflow:hidden;position:relative;${clone.style.background ? `background:${clone.style.background};` : ""}">${xhtml}</div>
+    <div xmlns="http://www.w3.org/1999/xhtml" style="width:${fmt.width}px;height:${fmt.height}px;overflow:hidden;position:relative;${bgStyle}">${xhtml}</div>
   </foreignObject>
 </svg>`;
       const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
@@ -392,36 +297,7 @@ export class ExportEngine {
     `;
     document.body.appendChild(clone);
 
-    const bg = state.background;
-    if (bg.type === "solid") clone.style.background = bg.color;
-    else if (bg.type === "gradient") {
-      const g = bg.gradient;
-      const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
-      const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
-      const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? g.opacity ?? 100));
-      const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? g.opacity ?? 100));
-      const from = this._withOpacity(g.from, fromOpacity);
-      const to = this._withOpacity(g.to, toOpacity);
-
-      if (fromOpacity < 100 || toOpacity < 100) {
-        clone.style.background = g.to;
-        clone.style.position = "relative";
-        const overlay = document.createElement("div");
-        overlay.style.cssText = `
-          position: absolute; inset: 0;
-          background: ${
-            g.type === "linear"
-              ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
-              : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`
-          };
-        `;
-        clone.appendChild(overlay);
-      } else {
-        clone.style.background = g.type === "linear"
-          ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
-          : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
-      }
-    }
+    this._applyBackground(clone, state.background);
 
     for (const layer of state.layers) {
       if (!layer.visible) continue;
@@ -538,8 +414,11 @@ export class ExportEngine {
       el.innerHTML = layer.svg;
       const svgEl = el.querySelector("svg");
       if (svgEl) {
-        svgEl.style.width = "100%";
-        svgEl.style.height = "100%";
+        svgEl.setAttribute("width", sz + "px");
+        svgEl.setAttribute("height", sz + "px");
+        svgEl.style.width = sz + "px";
+        svgEl.style.height = sz + "px";
+        svgEl.style.display = "block";
       }
     } else if (layer.type === "shape") {
       el.style.width = `${((layer.width ?? 20) * cw) / 100}px`;
@@ -549,6 +428,31 @@ export class ExportEngine {
     }
 
     return el;
+  }
+
+  /** Apply background to export clone — mirrors canvas-engine rendering exactly */
+  _applyBackground(el, bg) {
+    if (!bg) return;
+    if (bg.type === "solid") {
+      el.style.background = bg.color;
+    } else if (bg.type === "gradient") {
+      const g = bg.gradient;
+      const fromReach = Math.max(0, Math.min(100, g.fromReach ?? 0));
+      const toReach = Math.max(0, Math.min(100, g.toReach ?? g.reach ?? 100));
+      const fromOpacity = Math.max(0, Math.min(100, g.fromOpacity ?? g.opacity ?? 100));
+      const toOpacity = Math.max(0, Math.min(100, g.toOpacity ?? g.opacity ?? 100));
+      const from = this._withOpacity(g.from, fromOpacity);
+      const to = this._withOpacity(g.to, toOpacity);
+      const gradCSS =
+        g.type === "linear"
+          ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
+          : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
+      // Solid base so transparent gradient stops show bg.color (not app CSS background)
+      el.style.backgroundColor = bg.color ?? "#000000";
+      el.style.backgroundImage = gradCSS;
+    } else if (bg.type === "image" && bg.image) {
+      el.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
+    }
   }
 
   _buildFilename(state, formatId, ext = "png") {

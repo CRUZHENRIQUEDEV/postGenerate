@@ -595,10 +595,12 @@ export class CanvasEngine {
       );
       const from = this._withOpacity(g.from, fromOpacity);
       const to = this._withOpacity(g.to, toOpacity);
-      bgEl.style.background =
+      const gradCSS =
         g.type === "linear"
           ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
           : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
+      bgEl.style.backgroundColor = bg.color ?? "#000000";
+      bgEl.style.backgroundImage = gradCSS;
     } else if (bg.type === "image" && bg.image) {
       bgEl.style.background = `url(${bg.image}) center/${bg.imageSize ?? "cover"} no-repeat`;
     }
