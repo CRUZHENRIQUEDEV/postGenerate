@@ -407,6 +407,19 @@ class App {
       if (e.target.closest("#ctx-menu")) return;
       e.preventDefault();
     });
+
+    document.getElementById("btn-save-project")?.addEventListener("click", () => {
+      this._saveProjectNow().then(() => toast("Projeto salvo.", "success")).catch(() => {});
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (this._projectService.currentProjectId && !this._projectService.isReadOnly) {
+          this._saveProjectNow().then(() => toast("Projeto salvo.", "success")).catch(() => {});
+        }
+      }
+    });
   }
 
   _fitCanvas() {
