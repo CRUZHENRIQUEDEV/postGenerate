@@ -172,13 +172,13 @@ export class PresetService {
       const byName = existingTextLayers.find((el) => el.name && el.name === presetLayer.name);
       const byIndex = existingTextLayers[presetTextLayers.findIndex((pl) => pl.id === presetLayer.id)];
       const existing = byName ?? byIndex;
-      if (!existing) return presetLayer;
       const merged = structuredClone(presetLayer);
       TEXT_STYLE_PROPS.forEach((prop) => {
         if (prop in presetLayer) merged[prop] = presetLayer[prop];
       });
-      merged.content = existing.content;
-      merged.id = existing.id;
+      // NEVER copy preset placeholder text — preserve slide content or use empty string
+      merged.content = existing?.content ?? "";
+      if (existing) merged.id = existing.id;
       return merged;
     });
 

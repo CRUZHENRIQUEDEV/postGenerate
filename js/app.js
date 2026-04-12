@@ -19,7 +19,6 @@ import {
 import { FORMATS, FORMAT_GROUPS, getFormat } from "./formats.js";
 import {
   CanvasEngine,
-  createDefaultState,
   makeBadgeLayer,
   makeHeadlineLayer,
   makeSubLayer,
@@ -600,13 +599,7 @@ class App {
         if (e.target.closest("[data-reset-all]")) return;
         if (e.target.closest("[data-apply-style]")) return;
         this.canvas.snapshot();
-        const nextState = structuredClone(preset.state ?? createDefaultState());
-        if (preset.background && typeof preset.background === "object") {
-          nextState.background = structuredClone(preset.background);
-        } else {
-          nextState.background = structuredClone(this.canvas.getState().background);
-        }
-        nextState._presetId = preset.id;
+        const nextState = this._presetService.applyPresetToState(this.canvas.getState(), preset);
         this.canvas.setState(nextState);
         this._fitCanvas();
         this._updateFormatBadge(nextState.formatId);
