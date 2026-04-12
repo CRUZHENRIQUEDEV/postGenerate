@@ -12,14 +12,40 @@ export class ExportModalController {
     this._anim = anim;
     this._onFitCanvas = onFitCanvas;
     this._onUpdateFormatBadge = onUpdateFormatBadge;
+    this._lbIndex = 0;
+    this._lbImages = [];   // cache: index → dataUrl | null (null = pending)
+    this._lbKeyHandler = null;
   }
 
   wire() {
     this._wireExportModal();
+    this._wireLightbox();
   }
 
   open() {
     document.getElementById("export-modal")?.classList.add("open");
+    this._loadPreview();
+  }
+
+  async _loadPreview() {
+    const container = document.getElementById("export-preview-container");
+    const img = document.getElementById("export-preview-img");
+    const loader = document.getElementById("export-preview-loader");
+    if (!container || !img) return;
+    img.src = "";
+    if (loader) loader.style.display = "flex";
+    container.style.display = "block";
+    try {
+      const state = this._canvas.getState();
+      const { getFormat, FORMATS } = await import("../formats.js");
+      const fmt = getFormat(state.formatId) ?? FORMATS["ig-feed-square"];
+      const size = Math.max(fmt.width, fmt.height);
+      const dataUrl = await this._exporter.generateThumbnail(size);
+      img.src = dataUrl;
+    } catch (e) {
+      container.style.display = "none";
+      console.warn("Preview de exportação falhou:", e);
+    }
   }
 
   _wireExportModal() {
@@ -423,5 +449,177 @@ export class ExportModalController {
       return await this._exporter._exportBlob({ format: "webm", transparent, formatId });
     }
     throw new Error(`Unsupported media type: ${mediaType}`);
+  }
+
+  /* ── Slide Preview Lightbox ─────────────────────────────── */
+
+  _wireLightbox() {
+    document.getElementById("btn-open-slide-preview")?.addEventListener("click", () => this._openLightbox());
+    document.getElementById("export-preview-img")?.addEventListener("click", () => this._openLightbox());
+    document.getElementById("btn-close-slide-preview")?.addEventListener("click", () => this._closeLightbox());
+    document.getElementById("btn-slide-preview-prev")?.addEventListener("click", () => this._lbNav(-1));
+    document.getElementById("btn-slide-preview-next")?.addEventListener("click", () => this._lbNav(1));
+    document.getElementById("slide-preview-lightbox")?.addEventListener("click", (e) => {
+      if (e.target.id === "slide-preview-lightbox") this._closeLightbox();
+    });
+  }
+
+  async _openLightbox() {
+    const slides = this._slides.getSlides();
+    if (!slides.length) return;
+
+    this._lbIndex = this._slides.getActiveIndex();
+    this._lbImages = new Array(slides.length).fill(null);
+
+    const lb = document.getElementById("slide-preview-lightbox");
+    if (!lb) return;
+    lb.style.display = "flex";
+
+    // keyboard navigation
+    if (this._lbKeyHandler) document.removeEventListener("keydown", this._lbKeyHandler);
+    this._lbKeyHandler = (e) => {
+      if (e.key === "Escape") this._closeLightbox();
+      else if (e.key === "ArrowLeft") this._lbNav(-1);
+      else if (e.key === "ArrowRight") this._lbNav(1);
+    };
+    document.addEventListener("keydown", this._lbKeyHandler);
+
+    // build thumbnail strip
+    this._lbBuildStrip(slides);
+
+    // render current slide first
+    this._lbShowSlide(this._lbIndex, slides);
+
+    // generate all thumbnails in background (low-to-high priority from current)
+    this._lbGenerateAll(slides);
+  }
+
+  _lbBuildStrip(slides) {
+    const strip = document.getElementById("slide-preview-strip");
+    if (!strip) return;
+    strip.innerHTML = "";
+    slides.forEach((slide, i) => {
+      const btn = document.createElement("button");
+      btn.dataset.lbIdx = i;
+      btn.style.cssText = `
+        flex-shrink:0; padding:2px; border-radius:6px; border:2px solid transparent;
+        background:rgba(255,255,255,0.05); cursor:pointer; transition:border-color .15s;
+      `;
+      if (slide.thumb) {
+        const img = document.createElement("img");
+        img.src = slide.thumb;
+        img.style.cssText = "display:block; width:52px; height:52px; object-fit:cover; border-radius:4px;";
+        btn.appendChild(img);
+      } else {
+        btn.style.width = "56px";
+        btn.style.height = "56px";
+        btn.style.color = "#555";
+        btn.style.fontSize = "10px";
+        btn.textContent = String(i + 1);
+      }
+      btn.addEventListener("click", () => this._lbNav(i - this._lbIndex));
+      strip.appendChild(btn);
+    });
+    this._lbUpdateStrip();
+  }
+
+  _lbUpdateStrip() {
+    const strip = document.getElementById("slide-preview-strip");
+    if (!strip) return;
+    Array.from(strip.querySelectorAll("button[data-lb-idx]")).forEach((btn) => {
+      const active = parseInt(btn.dataset.lbIdx) === this._lbIndex;
+      btn.style.borderColor = active ? "var(--accent, #fff)" : "transparent";
+    });
+    // scroll active thumb into view
+    const activeBtn = strip.querySelector(`button[data-lb-idx="${this._lbIndex}"]`);
+    activeBtn?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }
+
+  _lbShowSlide(index, slides) {
+    const img = document.getElementById("slide-preview-img-full");
+    const loader = document.getElementById("slide-preview-loader-full");
+    const counter = document.getElementById("slide-preview-counter");
+    if (!img) return;
+
+    if (counter) counter.textContent = `${index + 1} / ${slides.length}`;
+
+    const cached = this._lbImages[index];
+    if (cached) {
+      img.src = cached;
+      if (loader) loader.style.display = "none";
+    } else {
+      img.src = slides[index].thumb ?? "";
+      if (loader) loader.style.display = "flex";
+    }
+
+    // show/hide nav buttons
+    const prev = document.getElementById("btn-slide-preview-prev");
+    const next = document.getElementById("btn-slide-preview-next");
+    if (prev) prev.style.visibility = index > 0 ? "visible" : "hidden";
+    if (next) next.style.visibility = index < slides.length - 1 ? "visible" : "hidden";
+
+    this._lbUpdateStrip();
+  }
+
+  _lbNav(delta) {
+    const slides = this._slides.getSlides();
+    const next = Math.max(0, Math.min(slides.length - 1, this._lbIndex + delta));
+    if (next === this._lbIndex) return;
+    this._lbIndex = next;
+    this._lbShowSlide(this._lbIndex, slides);
+  }
+
+  async _lbGenerateAll(slides) {
+    const saved = structuredClone(this._canvas.getState());
+    // order: current index first, then outward
+    const order = [this._lbIndex];
+    let lo = this._lbIndex - 1, hi = this._lbIndex + 1;
+    while (lo >= 0 || hi < slides.length) {
+      if (hi < slides.length) order.push(hi++);
+      if (lo >= 0) order.push(lo--);
+    }
+
+    for (const i of order) {
+      if (this._lbImages[i]) continue;
+      try {
+        this._canvas.setState(structuredClone(slides[i].state));
+        await this._wait(60);
+        const { getFormat, FORMATS } = await import("../formats.js");
+        const state = this._canvas.getState();
+        const fmt = getFormat(state.formatId) ?? FORMATS["ig-feed-square"];
+        const size = Math.max(fmt.width, fmt.height);
+        const dataUrl = await this._exporter.generateThumbnail(size);
+        this._lbImages[i] = dataUrl;
+        // update strip thumb
+        const strip = document.getElementById("slide-preview-strip");
+        const btn = strip?.querySelector(`button[data-lb-idx="${i}"]`);
+        if (btn) {
+          const existImg = btn.querySelector("img");
+          if (existImg) existImg.src = dataUrl;
+        }
+        // if this is the currently shown slide, swap to hi-res
+        if (i === this._lbIndex) {
+          const img = document.getElementById("slide-preview-img-full");
+          const loader = document.getElementById("slide-preview-loader-full");
+          if (img) { img.src = dataUrl; }
+          if (loader) loader.style.display = "none";
+        }
+      } catch (e) {
+        console.warn(`Lightbox: falha gerando preview do slide ${i + 1}`, e);
+      }
+    }
+
+    // restore
+    try { this._canvas.setState(saved); } catch (_) {}
+  }
+
+  _closeLightbox() {
+    const lb = document.getElementById("slide-preview-lightbox");
+    if (lb) lb.style.display = "none";
+    if (this._lbKeyHandler) {
+      document.removeEventListener("keydown", this._lbKeyHandler);
+      this._lbKeyHandler = null;
+    }
+    this._lbImages = [];
   }
 }

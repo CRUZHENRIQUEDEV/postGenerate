@@ -67,7 +67,7 @@ import { ShareService } from "./services/ShareService.js";
 import { PresetService } from "./services/PresetService.js";
 import { AIService } from "./services/AIService.js";
 
-import { uuid, openFilePicker as openFilePickerFn } from "./utils/ui-helpers.js";
+import { uuid, openFilePicker as openFilePickerFn, setSwatch } from "./utils/ui-helpers.js";
 
 const GOOGLE_FONTS = [
   "Inter",
@@ -381,7 +381,8 @@ class App {
       this._projectService.setDirty(true);
       this._queueProjectSave();
     });
-    this.canvas.on("stateChange", () => {
+    this.canvas.on("stateChange", (state) => {
+      this._syncBgPanel(state?.background ?? this.canvas.getState().background);
       this._queueBrandHistorySave();
       this._projectService.setDirty(true);
       this._queueProjectSave();
@@ -465,6 +466,57 @@ class App {
     bar.style.background = g.type === "linear"
       ? `linear-gradient(${g.angle}deg, ${from} ${fromReach}%, ${to} ${toReach}%)`
       : `radial-gradient(ellipse at center, ${from} ${fromReach}%, ${to} ${toReach}%)`;
+  }
+
+  _syncBgPanel(bg) {
+    if (!bg) return;
+    const type = bg.type ?? "solid";
+
+    // activate the right tab button
+    document.querySelectorAll(".bg-type-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.bgType === type);
+    });
+    // show the right panel
+    document.querySelectorAll(".bg-panel").forEach((p) => p.classList.add("hidden"));
+    document.getElementById(`bg-panel-${type}`)?.classList.remove("hidden");
+
+    if (type === "solid") {
+      setSwatch("prop-bg-color-swatch", bg.color ?? "#000000");
+    } else if (type === "gradient") {
+      const g = bg.gradient ?? {};
+      setSwatch("prop-grad-from-swatch", g.from ?? "#000000");
+      setSwatch("prop-grad-to-swatch", g.to ?? "#ffffff");
+      const angle = g.angle ?? 135;
+      const gradAngle = document.getElementById("prop-grad-angle");
+      const gradAngleInput = document.getElementById("prop-grad-angle-input");
+      const gradAngleVal = document.getElementById("prop-grad-angle-val");
+      if (gradAngle) gradAngle.value = angle;
+      if (gradAngleInput) gradAngleInput.value = angle;
+      if (gradAngleVal) gradAngleVal.textContent = angle + "°";
+      const gradType = document.getElementById("prop-grad-type");
+      if (gradType) gradType.value = g.type ?? "linear";
+      const fromReach = g.fromReach ?? 0;
+      const toReach = g.toReach ?? g.reach ?? 100;
+      const fromOpacity = g.fromOpacity ?? g.opacity ?? 100;
+      const toOpacity = g.toOpacity ?? g.opacity ?? 100;
+      const fromReachEl = document.getElementById("prop-grad-from-reach");
+      const fromReachVal = document.getElementById("prop-grad-from-reach-val");
+      const toReachEl = document.getElementById("prop-grad-to-reach");
+      const toReachVal = document.getElementById("prop-grad-to-reach-val");
+      const fromOpacityEl = document.getElementById("prop-grad-from-opacity");
+      const fromOpacityVal = document.getElementById("prop-grad-from-opacity-val");
+      const toOpacityEl = document.getElementById("prop-grad-to-opacity");
+      const toOpacityVal = document.getElementById("prop-grad-to-opacity-val");
+      if (fromReachEl) fromReachEl.value = fromReach;
+      if (fromReachVal) fromReachVal.textContent = fromReach + "%";
+      if (toReachEl) toReachEl.value = toReach;
+      if (toReachVal) toReachVal.textContent = toReach + "%";
+      if (fromOpacityEl) fromOpacityEl.value = fromOpacity;
+      if (fromOpacityVal) fromOpacityVal.textContent = fromOpacity + "%";
+      if (toOpacityEl) toOpacityEl.value = toOpacity;
+      if (toOpacityVal) toOpacityVal.textContent = toOpacity + "%";
+      this._updateGradientBar();
+    }
   }
 
   _withOpacity(color, opacityPercent = 100) {

@@ -61,7 +61,7 @@
                 color: var(--text-disabled);
                 margin-left: 8px;
               "
-              >v1.0.3</span
+              >v1.0.4</span
             >
           </h1>
           <div class="projects-home-actions">
@@ -2044,19 +2044,41 @@
               border: 1px solid var(--border);
               border-radius: 8px;
               overflow: hidden;
-              background: var(--bg-secondary);
+              background: var(--surface);
+              position: relative;
+              min-height: 80px;
             "
           >
+            <div
+              id="export-preview-loader"
+              style="
+                position: absolute; inset: 0;
+                display: flex; align-items: center; justify-content: center;
+                font-size: 12px; color: var(--text-muted);
+              "
+            >Gerando preview…</div>
             <img
               id="export-preview-img"
               style="
                 display: block;
                 width: 100%;
                 height: auto;
-                max-height: 200px;
+                max-height: 320px;
                 object-fit: contain;
+                cursor: pointer;
               "
+              title="Clique para ver todos os slides"
+              onload="this.previousElementSibling.style.display='none'"
             />
+            <button id="btn-open-slide-preview" style="
+              width:100%; padding:7px 0; background:rgba(255,255,255,0.05);
+              border:none; border-top:1px solid var(--border); color:var(--text-muted);
+              font-size:12px; cursor:pointer; display:flex; align-items:center;
+              justify-content:center; gap:6px;
+            ">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              Ver todos os slides
+            </button>
           </div>
 
           <div style="margin-bottom: 16px">
@@ -3105,6 +3127,69 @@
         font-size: 13px;
       "
     ></div>
+
+    <!-- ╔══ Slide Preview Lightbox ═════════════════════════════════╗ -->
+    <div id="slide-preview-lightbox" style="
+      display:none; position:fixed; inset:0; z-index:9999;
+      background:rgba(0,0,0,0.92); backdrop-filter:blur(6px);
+      flex-direction:column; align-items:center; justify-content:center;
+    ">
+      <!-- Header -->
+      <div style="
+        display:flex; align-items:center; justify-content:space-between;
+        width:100%; max-width:900px; padding:12px 16px; box-sizing:border-box;
+      ">
+        <span id="slide-preview-counter" style="color:#aaa; font-size:13px;"></span>
+        <button id="btn-close-slide-preview" style="
+          background:none; border:none; color:#aaa; cursor:pointer;
+          font-size:22px; line-height:1; padding:4px 8px;
+        " title="Fechar (Esc)">×</button>
+      </div>
+
+      <!-- Image area -->
+      <div style="
+        flex:1; display:flex; align-items:center; justify-content:center;
+        width:100%; position:relative; overflow:hidden; padding:0 64px; box-sizing:border-box;
+      ">
+        <!-- Prev -->
+        <button id="btn-slide-preview-prev" style="
+          position:absolute; left:12px; top:50%; transform:translateY(-50%);
+          background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15);
+          color:#fff; cursor:pointer; border-radius:8px; width:40px; height:56px;
+          font-size:18px; display:flex; align-items:center; justify-content:center;
+          transition:background .15s;
+        " title="Anterior (←)">&#8249;</button>
+
+        <div style="position:relative; max-width:820px; width:100%; display:flex; align-items:center; justify-content:center;">
+          <div id="slide-preview-loader-full" style="
+            position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+            color:#666; font-size:13px; pointer-events:none;
+          ">Gerando…</div>
+          <img id="slide-preview-img-full" style="
+            display:block; max-width:100%; max-height:calc(100vh - 160px);
+            object-fit:contain; border-radius:8px;
+            box-shadow:0 8px 40px rgba(0,0,0,0.6);
+          " src="" alt="" />
+        </div>
+
+        <!-- Next -->
+        <button id="btn-slide-preview-next" style="
+          position:absolute; right:12px; top:50%; transform:translateY(-50%);
+          background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15);
+          color:#fff; cursor:pointer; border-radius:8px; width:40px; height:56px;
+          font-size:18px; display:flex; align-items:center; justify-content:center;
+          transition:background .15s;
+        " title="Próximo (→)">&#8250;</button>
+      </div>
+
+      <!-- Thumbnail strip -->
+      <div style="padding:12px 16px; width:100%; box-sizing:border-box; overflow:hidden;">
+        <div id="slide-preview-strip" style="
+          display:flex; gap:8px; justify-content:center; overflow-x:auto;
+          padding-bottom:4px; scrollbar-width:thin;
+        "></div>
+      </div>
+    </div>
 
     <!-- ╔══ App bootstrap ══════════════════════════════════════════╗ -->
     <script type="module" src="js/app.js"></script>
