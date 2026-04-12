@@ -16,6 +16,16 @@ export class ProjectService {
     this._loadingProject = false;
     this._projectDirty = false;
     this._shareReadOnly = false;
+    this._autoSaveInterval = null;
+    this._setupAutoSave();
+  }
+
+  _setupAutoSave() {
+    this._autoSaveInterval = setInterval(async () => {
+      if (this._projectDirty && !this._loadingProject && this._currentProjectId && !this._shareReadOnly) {
+        try { await this.save(); } catch (e) { /* silent */ }
+      }
+    }, 15000);
   }
 
   get currentProjectId() { return this._currentProjectId; }

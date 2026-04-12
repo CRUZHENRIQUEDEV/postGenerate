@@ -55,6 +55,7 @@ import { PanelVisibilityController } from "./controllers/PanelVisibilityControll
 import { ShareModalController } from "./controllers/ShareModalController.js";
 import { ThemeController } from "./controllers/ThemeController.js";
 import { ShortcutsModalController } from "./controllers/ShortcutsModalController.js";
+import { PresetModalController } from "./controllers/PresetModalController.js";
 import { ProjectsHomeController } from "./controllers/ProjectsHomeController.js";
 import { ContextMenuController } from "./controllers/ContextMenuController.js";
 import { RealtimeCollabController } from "./controllers/RealtimeCollabController.js";
@@ -154,6 +155,10 @@ class App {
     this._backupService = new BackupService(this.brands);
     this._shareService = new ShareService(this._projectService, this.brands);
     this._presetService = new PresetService(this.canvas, this.exporter, this.brands);
+    this._presetModalController = new PresetModalController({
+      presetService: this._presetService,
+      canvas: this.canvas,
+    });
 
     this._ai = new AIService({
       canvas: this.canvas,
@@ -197,6 +202,7 @@ class App {
     this._contextMenuController.wire();
     this._realtimeCollabController.wire();
     this._ai.wire();
+    this._presetModalController.wire();
 
     this._fitCanvas();
     this._updateFormatBadge(this.canvas.getState().formatId);
