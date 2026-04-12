@@ -390,12 +390,29 @@ export class ExportEngine {
         const bw = ((layer.borderWidth ?? 2) * cw) / 1080;
         el.style.border = `${bw}px solid ${layer.borderColor ?? "rgba(255,255,255,0.28)"}`;
       }
+      if (layer.boxShadow) {
+        const s = layer.boxShadow;
+        const blurPx = ((s.blur ?? 8) * cw) / 1080;
+        const spreadPx = ((s.spread ?? 0) * cw) / 1080;
+        el.style.boxShadow = `${((s.x ?? 2) * cw) / 1080}px ${((s.y ?? 4) * cw) / 1080}px ${blurPx}px ${spreadPx}px ${s.color ?? "rgba(0,0,0,0.4)"}`;
+      }
+      if (layer.layerBlur > 0) {
+        el.style.filter = `blur(${((layer.layerBlur ?? 0) * cw) / 1080}px)`;
+      }
       const img = document.createElement("img");
       img.src = layer.src;
       img.crossOrigin = "anonymous";
-      img.style.cssText = `width:100%;height:100%;object-fit:${layer.objectFit ?? "contain"};display:block;`;
+      img.style.cssText = `width:100%;height:100%;object-fit:${layer.objectFit ?? "cover"};display:block;`;
       img.style.transform = `scale(${Math.max(0.2, Math.min(4, layer.imageZoom ?? 1))})`;
       img.style.transformOrigin = "center center";
+      const hasCrop = layer.cropX != null || layer.cropY != null || layer.cropW != null || layer.cropH != null;
+      if (hasCrop) {
+        const cropX = layer.cropX ?? 0;
+        const cropY = layer.cropY ?? 0;
+        const cropW = layer.cropW ?? 100;
+        const cropH = layer.cropH ?? 100;
+        img.style.clipPath = `inset(${cropY}% ${100 - cropW - cropX}% ${100 - cropH - cropY}% ${cropX}% round ${((layer.borderRadius ?? 0) * cw) / 100}px)`;
+      }
       el.appendChild(img);
     } else if (layer.type === "icon" && layer.svg) {
       const sz = ((layer.size ?? 8) * cw) / 100;
