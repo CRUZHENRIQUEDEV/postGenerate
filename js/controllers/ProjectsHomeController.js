@@ -516,6 +516,8 @@ export class ProjectsHomeController {
     this._fitCanvas();
     this._updateFormatBadge(this._canvas.getState().formatId);
     this._updateProjectNameLabel(project.name);
+    const saveBtn = document.getElementById("btn-save-project");
+    if (saveBtn) saveBtn.style.display = "";
     this._onShowProjectsHome(false);
   }
 
