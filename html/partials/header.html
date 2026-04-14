@@ -1,0 +1,213 @@
+      <header id="header">
+        <!-- Logo -->
+        <div class="header-brand">
+          <div class="header-logo">P</div>
+          <span class="header-app-name">PostGenerate</span>
+        </div>
+
+        <div class="header-sep"></div>
+
+        <!-- Brand selector -->
+        <div class="dropdown">
+          <button id="btn-brand" class="brand-selector">
+            <div class="brand-selector-dot"></div>
+            <span id="brand-name-label">Sem marca</span>
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              fill="none"
+              style="opacity: 0.5"
+            >
+              <path
+                d="M2 3.5L5 6.5L8 3.5"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+          <div id="brand-dropdown-menu" class="dropdown-menu"></div>
+        </div>
+
+        <div class="header-sep"></div>
+
+        <!-- Format selector -->
+        <button
+          id="btn-format"
+          class="format-selector-btn"
+          title="Selecionar formato"
+        >
+          📷 Instagram — Feed Quadrado
+          <span class="format-dims">1080×1080</span>
+        </button>
+        <div class="header-sep"></div>
+        <button id="btn-projects-home" class="btn btn-ghost btn-sm">
+          Projetos
+        </button>
+        <span id="project-name-label" class="text-xs text-muted"
+          >Sem projeto</span
+        >
+        <button
+          id="btn-save-project"
+          class="btn btn-ghost btn-icon"
+          title="Salvar projeto (Ctrl+S)"
+          style="display:none"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+        </button>
+        <span
+          id="project-save-status"
+          class="text-xs"
+          style="color: var(--text-disabled)"
+        ></span>
+
+        <!-- Header center spacer -->
+        <div style="flex: 1"></div>
+
+        <!-- Undo / Redo -->
+        <div class="header-right">
+          <button
+            id="btn-undo"
+            class="btn btn-ghost btn-icon"
+            title="Desfazer (Ctrl+Z)"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M3 7v6h6" />
+              <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+            </svg>
+          </button>
+          <button
+            id="btn-redo"
+            class="btn btn-ghost btn-icon"
+            title="Refazer (Ctrl+Y)"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M21 7v6h-6" />
+              <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" />
+            </svg>
+          </button>
+
+          <div class="header-sep"></div>
+
+          <button
+            id="btn-save-preset"
+            class="btn btn-ghost btn-sm"
+            title="Salvar preset"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
+              />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+            Salvar
+          </button>
+          <button
+            id="btn-reset-preset"
+            class="btn btn-ghost btn-sm"
+            title="Resetar slide para o preset vinculado"
+            style="display: none"
+          >
+            ↺ Resetar
+          </button>
+          <button
+            id="btn-export-brand"
+            class="btn btn-ghost btn-sm"
+            title="Exportar conteúdo da marca"
+          >
+            Exportar Marca
+          </button>
+          <button
+            id="btn-import-brand"
+            class="btn btn-ghost btn-sm"
+            title="Importar pacote de marca"
+          >
+            Importar Marca
+          </button>
+          <input
+            id="brand-file-input"
+            type="file"
+            accept=".json,.zip,application/json,application/zip"
+            style="display: none"
+          />
+          <button
+            id="btn-share"
+            class="btn btn-ghost btn-sm"
+            title="Compartilhar projeto ou marca"
+          >
+            Compartilhar
+          </button>
+          <button
+            id="btn-ai"
+            class="btn btn-ghost btn-sm"
+            title="Abrir chat lateral de IA"
+          >
+            Chat IA
+          </button>
+          <button
+            id="btn-theme"
+            class="btn btn-ghost btn-sm"
+            title="Alternar tema claro/escuro"
+            style="font-size: 14px; line-height: 1"
+          >
+            ◐
+          </button>
+          <button
+            id="btn-shortcuts"
+            class="btn btn-ghost btn-sm"
+            title="Atalhos de teclado (?)"
+            style="font-size: 16px; line-height: 1"
+          >
+            ?
+          </button>
+
+          <button
+            id="btn-export"
+            class="btn btn-primary"
+            title="Exportar imagem"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Exportar
+          </button>
+        </div>
+      </header>

@@ -248,6 +248,8 @@ export class ExportEngine {
     const zip = new window.JSZip();
     const savedState = structuredClone(this._engine.getState());
 
+    const captions = [];
+
     for (let i = 0; i < slides.length; i++) {
       const slide = slides[i];
       try {
@@ -259,10 +261,17 @@ export class ExportEngine {
         const pad = String(i + 1).padStart(2, "0");
         const name = `slide-${pad}-${this._buildFilename(state, fmtId)}`;
         zip.file(name, blob);
+        captions.push(`=== Slide ${i + 1} ===\n${slide.caption ?? ""}`);
         onProgress?.(i + 1, slides.length);
       } catch (e) {
         console.error(`Slide ${i + 1} export failed:`, e);
+        captions.push(`=== Slide ${i + 1} ===\n`);
       }
+    }
+
+    if (captions.length > 0) {
+      const captionText = captions.join("\n\n");
+      zip.file("legendas.txt", captionText);
     }
 
     // Restore original state

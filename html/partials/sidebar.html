@@ -1,0 +1,380 @@
+      <aside id="sidebar">
+        <!-- Tabs -->
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab active" data-tab="colors">Cores</button>
+          <button class="sidebar-tab" data-tab="fonts">Fontes</button>
+          <button class="sidebar-tab" data-tab="logos">Logos</button>
+          <button class="sidebar-tab" data-tab="presets">Presets</button>
+          <button class="sidebar-tab" data-tab="history">Histórico</button>
+        </div>
+
+        <div class="sidebar-content">
+          <!-- CORES tab -->
+          <div id="tab-colors" class="tab-panel active">
+            <div class="sidebar-section">
+              <div class="sidebar-section-header">
+                <span class="sidebar-section-title">Paleta da Marca</span>
+                <button
+                  id="btn-add-global-color"
+                  class="btn btn-ghost btn-sm btn-icon"
+                  title="Adicionar cor"
+                >
+                  +
+                </button>
+              </div>
+              <div id="sidebar-colors" class="palette-grid">
+                <!-- Rendered by brand manager -->
+              </div>
+            </div>
+
+            <!-- Background controls -->
+            <div class="sidebar-section">
+              <div class="sidebar-section-header">
+                <span class="sidebar-section-title">Fundo do Post</span>
+              </div>
+
+              <!-- Type selector -->
+              <div class="bg-type-group">
+                <button class="bg-type-btn active" data-bg-type="solid">
+                  Sólido
+                </button>
+                <button class="bg-type-btn" data-bg-type="gradient">
+                  Gradiente
+                </button>
+                <button class="bg-type-btn" data-bg-type="image">Imagem</button>
+              </div>
+
+              <!-- Solid panel -->
+              <div id="bg-panel-solid" class="bg-panel">
+                <div class="prop-row">
+                  <span class="prop-label">Cor</span>
+                  <div class="prop-controls">
+                    <button id="prop-bg-color-swatch" class="color-swatch-btn">
+                      <div
+                        class="swatch-fill"
+                        style="background: #000000"
+                      ></div>
+                    </button>
+                    <span class="text-muted text-xs">#000000</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Gradient panel -->
+              <div id="bg-panel-gradient" class="bg-panel hidden">
+                <div
+                  id="gradient-preview-bar"
+                  class="gradient-bar"
+                  style="background: linear-gradient(135deg, #000000, #0e1a2e)"
+                ></div>
+                <div class="prop-row">
+                  <span class="prop-label">De</span>
+                  <div class="prop-controls">
+                    <button id="prop-grad-from-swatch" class="color-swatch-btn">
+                      <div
+                        class="swatch-fill"
+                        style="background: #000000"
+                      ></div>
+                    </button>
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Para</span>
+                  <div class="prop-controls">
+                    <button id="prop-grad-to-swatch" class="color-swatch-btn">
+                      <div
+                        class="swatch-fill"
+                        style="background: #0e1a2e"
+                      ></div>
+                    </button>
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Opacidade De</span>
+                  <div class="prop-controls" style="gap: 6px">
+                    <input
+                      id="prop-grad-from-opacity"
+                      type="range"
+                      class="slider"
+                      min="0"
+                      max="100"
+                      value="100"
+                      style="flex: 1"
+                    />
+                    <span
+                      id="prop-grad-from-opacity-val"
+                      class="text-xs text-muted"
+                      >100%</span
+                    >
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Opacidade Para</span>
+                  <div class="prop-controls" style="gap: 6px">
+                    <input
+                      id="prop-grad-to-opacity"
+                      type="range"
+                      class="slider"
+                      min="0"
+                      max="100"
+                      value="100"
+                      style="flex: 1"
+                    />
+                    <span
+                      id="prop-grad-to-opacity-val"
+                      class="text-xs text-muted"
+                      >100%</span
+                    >
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Tipo</span>
+                  <div class="prop-controls">
+                    <select
+                      id="prop-grad-type"
+                      class="input input-sm"
+                      style="flex: 1"
+                    >
+                      <option value="linear">Linear</option>
+                      <option value="radial">Radial</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Ângulo</span>
+                  <div class="prop-controls" style="gap: 6px">
+                    <input
+                      id="prop-grad-angle"
+                      type="range"
+                      class="slider"
+                      min="0"
+                      max="360"
+                      value="135"
+                      style="flex: 1"
+                    />
+                    <input
+                      id="prop-grad-angle-input"
+                      type="number"
+                      class="input input-sm"
+                      min="0"
+                      max="360"
+                      step="1"
+                      value="135"
+                      style="width: 72px"
+                    />
+                    <span id="prop-grad-angle-val" class="text-xs text-muted"
+                      >135°</span
+                    >
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Alcance De</span>
+                  <div class="prop-controls" style="gap: 6px">
+                    <input
+                      id="prop-grad-from-reach"
+                      type="range"
+                      class="slider"
+                      min="0"
+                      max="100"
+                      value="0"
+                      style="flex: 1"
+                    />
+                    <span
+                      id="prop-grad-from-reach-val"
+                      class="text-xs text-muted"
+                      >0%</span
+                    >
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Alcance Para</span>
+                  <div class="prop-controls" style="gap: 6px">
+                    <input
+                      id="prop-grad-to-reach"
+                      type="range"
+                      class="slider"
+                      min="0"
+                      max="100"
+                      value="100"
+                      style="flex: 1"
+                    />
+                    <span id="prop-grad-to-reach-val" class="text-xs text-muted"
+                      >100%</span
+                    >
+                  </div>
+                </div>
+                <div class="prop-row">
+                  <span class="prop-label">Opacidade</span>
+                  <div class="prop-controls" style="gap: 6px">
+                    <input
+                      id="prop-grad-opacity"
+                      type="range"
+                      class="slider"
+                      min="0"
+                      max="100"
+                      value="100"
+                      style="flex: 1"
+                    />
+                    <span id="prop-grad-opacity-val" class="text-xs text-muted"
+                      >100%</span
+                    >
+                  </div>
+                </div>
+              </div>
+
+              <!-- Image panel -->
+              <div id="bg-panel-image" class="bg-panel hidden">
+                <button
+                  id="btn-bg-image"
+                  class="btn full-width"
+                  style="margin-bottom: 8px"
+                >
+                  Escolher imagem...
+                </button>
+                <div class="prop-row">
+                  <span class="prop-label">Tamanho</span>
+                  <div class="prop-controls">
+                    <select
+                      id="prop-bg-image-size"
+                      class="input input-sm"
+                      style="flex: 1"
+                    >
+                      <option value="cover">Cover</option>
+                      <option value="contain">Contain</option>
+                      <option value="fill">Fill</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- FONTES tab -->
+          <div id="tab-fonts" class="tab-panel">
+            <div class="sidebar-section">
+              <div class="sidebar-section-header">
+                <span class="sidebar-section-title">Fontes da Marca</span>
+                <button
+                  id="btn-add-font"
+                  class="btn btn-ghost btn-sm btn-icon"
+                  title="Adicionar fonte"
+                >
+                  +
+                </button>
+              </div>
+              <div id="sidebar-fonts">
+                <!-- Rendered by brand manager -->
+              </div>
+            </div>
+
+            <!-- Brand identity for AI -->
+            <div class="sidebar-section">
+              <div class="sidebar-section-header">
+                <span class="sidebar-section-title">Identidade para IA</span>
+                <button
+                  id="btn-save-brand-identity"
+                  class="btn btn-ghost btn-sm"
+                  title="Salvar"
+                >
+                  ✓
+                </button>
+              </div>
+              <div
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  gap: 6px;
+                  padding-bottom: 4px;
+                "
+              >
+                <div>
+                  <label class="label" style="font-size: 10px"
+                    >Fonte principal da marca</label
+                  >
+                  <input
+                    id="brand-primary-font"
+                    class="input input-sm"
+                    placeholder="Ex: Montserrat, Inter, Poppins"
+                  />
+                </div>
+                <div>
+                  <label class="label" style="font-size: 10px"
+                    >Fonte secundária</label
+                  >
+                  <input
+                    id="brand-secondary-font"
+                    class="input input-sm"
+                    placeholder="Ex: Playfair Display (opcional)"
+                  />
+                </div>
+                <div>
+                  <label class="label" style="font-size: 10px"
+                    >Tom de voz / estilo da marca</label
+                  >
+                  <input
+                    id="brand-voice"
+                    class="input input-sm"
+                    placeholder="Ex: profissional, inspirador, direto"
+                  />
+                </div>
+                <div>
+                  <label class="label" style="font-size: 10px"
+                    >Palavras-chave / valores</label
+                  >
+                  <input
+                    id="brand-keywords"
+                    class="input input-sm"
+                    placeholder="Ex: inovação, confiança, resultados"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="sidebar-section">
+              <div class="sidebar-section-title" style="margin-bottom: 8px">
+                Fontes do Google
+              </div>
+              <div
+                style="display: flex; flex-direction: column; gap: 3px"
+                id="google-fonts-list"
+              >
+                <!-- Rendered on init -->
+              </div>
+            </div>
+          </div>
+
+          <!-- LOGOS tab -->
+          <div id="tab-logos" class="tab-panel">
+            <div class="sidebar-section">
+              <div class="sidebar-section-header">
+                <span class="sidebar-section-title">Logos</span>
+              </div>
+              <div id="sidebar-logos" class="asset-grid">
+                <!-- Rendered by brand manager -->
+              </div>
+            </div>
+          </div>
+
+          <!-- PRESETS tab -->
+          <div id="tab-presets" class="tab-panel">
+            <div class="sidebar-section">
+              <div class="sidebar-section-header">
+                <span class="sidebar-section-title">Presets Salvos</span>
+              </div>
+              <div id="sidebar-presets">
+                <!-- Rendered by app -->
+              </div>
+            </div>
+          </div>
+
+          <div id="tab-history" class="tab-panel">
+            <div class="sidebar-section">
+              <div class="sidebar-section-header">
+                <span class="sidebar-section-title">Histórico da Marca</span>
+              </div>
+              <div id="sidebar-history"></div>
+            </div>
+          </div>
+        </div>
+        <!-- /sidebar-content -->
+      </aside>

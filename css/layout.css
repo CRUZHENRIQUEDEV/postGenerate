@@ -252,9 +252,8 @@ body {
 
 .canvas-preview-area {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   padding: var(--sp-6);
   overflow: hidden;
   width: 100%;
@@ -263,7 +262,7 @@ body {
 /* Checkered bg to show transparency */
 .canvas-preview-wrapper {
   position: relative;
-  flex-shrink: 0;
+  display: block;
   background-image:
     linear-gradient(45deg, #1a1a2e 25%, transparent 25%),
     linear-gradient(-45deg, #1a1a2e 25%, transparent 25%),

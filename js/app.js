@@ -67,6 +67,7 @@ import { PresetService } from "./services/PresetService.js";
 import { AIService } from "./services/AIService.js";
 
 import { uuid, openFilePicker as openFilePickerFn, setSwatch } from "./utils/ui-helpers.js";
+import { loadPartials } from "./services/HtmlLoader.js";
 
 const GOOGLE_FONTS = [
   "Inter",
@@ -135,6 +136,7 @@ class App {
   }
 
   async init() {
+    await loadPartials();
     this._loadFonts();
     await initDB();
 

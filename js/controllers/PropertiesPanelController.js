@@ -145,6 +145,7 @@ export class PropertiesPanelController {
       const checkbox = document.getElementById("prop-ratio-lock");
       if (checkbox) checkbox.checked = !!(layer._lockRatio);
     }
+    this._setVal("prop-rotation", layer.rotation ?? 0);
     this._setVal("prop-layer-blur", layer.layerBlur ?? 0);
     const s = layer.boxShadow ?? { x: 2, y: 4, blur: 8, color: "rgba(0,0,0,0.4)" };
     this._setVal("prop-shadow-x", s.x ?? 2);
@@ -463,8 +464,31 @@ export class PropertiesPanelController {
       const layer = this._canvas.getSelectedLayer();
       if (!layer) return;
       this._canvas.updateLayer(layer.id, { opacity: parseInt(e.target.value) / 100 });
+      const val = document.getElementById("prop-opacity-val");
+      if (val) val.textContent = e.target.value + "%";
     });
     panel.querySelector("#prop-opacity")?.addEventListener("focus", () => this._canvas.snapshot());
+
+    panel.querySelector("#prop-rotation")?.addEventListener("input", (e) => {
+      const layer = this._canvas.getSelectedLayer();
+      if (!layer) return;
+      this._canvas.updateLayer(layer.id, { rotation: parseFloat(e.target.value) || 0 });
+    });
+    panel.querySelector("#prop-rotation")?.addEventListener("focus", () => this._canvas.snapshot());
+
+    panel.querySelector("#btn-flip-h")?.addEventListener("click", () => {
+      const layer = this._canvas.getSelectedLayer();
+      if (!layer) return;
+      this._canvas.snapshot();
+      this._canvas.updateLayer(layer.id, { flipH: !layer.flipH });
+    });
+
+    panel.querySelector("#btn-flip-v")?.addEventListener("click", () => {
+      const layer = this._canvas.getSelectedLayer();
+      if (!layer) return;
+      this._canvas.snapshot();
+      this._canvas.updateLayer(layer.id, { flipV: !layer.flipV });
+    });
 
     panel.querySelector("#prop-text-transform")?.addEventListener("change", (e) => {
       const layer = this._canvas.getSelectedLayer();

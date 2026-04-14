@@ -1,0 +1,28 @@
+.pg-layer--selected {
+  outline: 2px solid #7bc4ec;
+  outline-offset: 1px;
+}
+.pg-layer:hover:not(.pg-layer--selected) {
+  outline: 1px dashed rgba(123, 196, 236, 0.4);
+  outline-offset: 1px;
+}
+#canvas-preview-area {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: hidden;
+  position: relative;
+  box-sizing: border-box;
+}
+#canvas-area {
+  background:
+    radial-gradient(
+      ellipse 60% 40% at 30% 60%,
+      rgba(123, 196, 236, 0.04) 0%,
+      transparent 60%
+    ),
+    var(--canvas-area-bg);
+}

@@ -1,0 +1,39 @@
+    <section id="projects-home" class="projects-home open">
+      <div class="projects-home-content">
+        <div class="projects-home-header">
+          <h1>
+            Projetos
+            <span
+              style="
+                font-size: 13px;
+                font-weight: 400;
+                color: var(--text-disabled);
+                margin-left: 8px;
+              "
+              >v1.0.4</span
+            >
+          </h1>
+          <div class="projects-home-actions">
+            <button id="btn-new-project-single" class="btn">
+              Novo Projeto (Imagem)
+            </button>
+            <button id="btn-new-project-slides" class="btn btn-primary">
+              Novo Projeto (Slides)
+            </button>
+            <button id="btn-templates-gallery" class="btn">
+              Galeria de Templates
+            </button>
+            <button id="btn-import-project-file" class="btn">
+              Importar Projeto
+            </button>
+            <input
+              id="project-file-input"
+              type="file"
+              accept=".json,application/json"
+              style="display: none"
+            />
+          </div>
+        </div>
+        <div id="projects-grid" class="projects-grid"></div>
+      </div>
+    </section>

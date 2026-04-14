@@ -96,7 +96,11 @@ export class ProjectsHomeController {
     this._tplViewMode = this._tplViewMode || "templates";
     const modal = document.getElementById("templates-modal");
     if (modal) { modal.style.display = "flex"; modal.classList.add("open"); }
-    this._renderTemplatesGallery();
+    try {
+      this._renderTemplatesGallery();
+    } catch (e) {
+      console.error("[Templates] Erro ao renderizar galeria:", e);
+    }
   }
 
   _renderTemplatesGallery() {
@@ -301,7 +305,11 @@ export class ProjectsHomeController {
   }
 
   async _createProject(name, mode = "slides") {
-    const state = { layers: [], formatId: "instagram-square" };
+    const state = {
+      formatId: "ig-feed-square",
+      background: { type: "solid", color: "#000000", gradient: { type: "linear", from: "#000000", to: "#0e1a2e", angle: 135, fromReach: 0, toReach: 100, opacity: 100, fromOpacity: 100, toOpacity: 100 }, image: null, imageSize: "cover" },
+      layers: [],
+    };
     const projectId = uuid();
     await ProjectsDB.save({
       id: projectId,
@@ -513,7 +521,7 @@ export class ProjectsHomeController {
     if (!project) return;
     const ok = await this._projectService.open(projectId);
     if (!ok) return;
-    this._fitCanvas();
+    requestAnimationFrame(() => this._fitCanvas());
     this._updateFormatBadge(this._canvas.getState().formatId);
     this._updateProjectNameLabel(project.name);
     const saveBtn = document.getElementById("btn-save-project");

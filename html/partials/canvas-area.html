@@ -1,0 +1,246 @@
+      <main id="canvas-area">
+        <!-- Canvas toolbar -->
+        <div class="canvas-toolbar">
+          <div class="canvas-toolbar-left">
+            <button
+              id="btn-add-text"
+              class="btn btn-ghost btn-sm"
+              title="Adicionar texto"
+            >
+              T+ Texto
+            </button>
+            <button
+              id="btn-add-badge"
+              class="btn btn-ghost btn-sm"
+              title="Adicionar badge"
+            >
+              ◉ Badge
+            </button>
+            <button
+              id="btn-add-image"
+              class="btn btn-ghost btn-sm"
+              title="Adicionar imagem"
+            >
+              🖼 Imagem
+            </button>
+            <button
+              id="btn-add-icon"
+              class="btn btn-ghost btn-sm"
+              title="Adicionar ícone"
+            >
+              ⬢ Ícone
+            </button>
+            <button
+              id="btn-add-shape"
+              class="btn btn-ghost btn-sm"
+              title="Adicionar forma"
+            >
+              ▭ Forma
+            </button>
+            <span
+              style="width: 1px; background: var(--border); margin: 0 6px"
+            ></span>
+            <button
+              id="btn-align-left"
+              class="btn btn-ghost btn-sm"
+              title="Alinhar à esquerda"
+            >
+              ◧
+            </button>
+            <button
+              id="btn-align-center-h"
+              class="btn btn-ghost btn-sm"
+              title="Centralizar horizontal"
+            >
+              ⊟
+            </button>
+            <button
+              id="btn-align-right"
+              class="btn btn-ghost btn-sm"
+              title="Alinhar à direita"
+            >
+              ◨
+            </button>
+            <button
+              id="btn-align-top"
+              class="btn btn-ghost btn-sm"
+              title="Alinhar ao topo"
+            >
+              ⊡
+            </button>
+            <button
+              id="btn-align-center-v"
+              class="btn btn-ghost btn-sm"
+              title="Centralizar vertical"
+            >
+              ⊞
+            </button>
+            <button
+              id="btn-align-bottom"
+              class="btn btn-ghost btn-sm"
+              title="Alinhar ao fundo"
+            >
+              ⊟
+            </button>
+            <button
+              id="btn-distribute-h"
+              class="btn btn-ghost btn-sm"
+              title="Distribuir horizontalmente"
+            >
+              ☰
+            </button>
+            <button
+              id="btn-distribute-v"
+              class="btn btn-ghost btn-sm"
+              title="Distribuir verticalmente"
+            >
+              ≡
+            </button>
+          </div>
+          <div class="canvas-toolbar-right">
+            <button
+              id="btn-apply-bg-all-slides"
+              class="btn btn-ghost btn-sm"
+              title="Aplicar o fundo deste slide em todos os slides do projeto"
+            >
+              Fundo → Todos
+            </button>
+            <button
+              id="btn-play-animation"
+              class="btn btn-ghost btn-sm"
+              title="Pré-visualizar animações"
+            >
+              ▶ Animações
+            </button>
+            <button
+              id="btn-safe-area"
+              class="btn btn-ghost btn-sm"
+              title="Guias de área segura"
+            >
+              ⊡
+            </button>
+            <button
+              id="btn-canvas-img-zoom-out"
+              class="btn btn-ghost btn-sm"
+              title="Diminuir zoom do slide no canvas"
+            >
+              🔍−
+            </button>
+            <button
+              id="btn-canvas-img-zoom-in"
+              class="btn btn-ghost btn-sm"
+              title="Aumentar zoom do slide no canvas"
+            >
+              🔍+
+            </button>
+            <span id="zoom-badge" class="zoom-badge">50%</span>
+          </div>
+        </div>
+
+        <!-- Preview -->
+        <div id="canvas-preview-area">
+          <div class="canvas-preview-wrapper">
+            <div id="post-canvas">
+              <!-- Rendered by CanvasEngine -->
+            </div>
+          </div>
+        </div>
+
+        <div id="slides-panel">
+          <div class="layers-header">
+            <span class="layers-title">Carrossel</span>
+            <div style="display: flex; gap: 4px">
+              <button
+                id="btn-toggle-caption-box"
+                class="btn btn-ghost btn-sm btn-icon"
+                title="Mostrar/ocultar legenda"
+              >
+                📝
+              </button>
+              <button
+                id="btn-slide-add"
+                class="btn btn-ghost btn-sm btn-icon"
+                title="Adicionar slide"
+              >
+                +
+              </button>
+              <button
+                id="btn-slide-duplicate"
+                class="btn btn-ghost btn-sm btn-icon"
+                title="Duplicar slide"
+              >
+                ⧉
+              </button>
+              <button
+                id="btn-slide-remove"
+                class="btn btn-ghost btn-sm btn-icon btn-danger"
+                title="Remover slide"
+              >
+                −
+              </button>
+            </div>
+          </div>
+          <div id="slides-track" class="slides-track"></div>
+          <div
+            id="clipboard-badge"
+            style="
+              display: none;
+              font-size: 11px;
+              color: var(--text-muted);
+              padding: 2px 8px;
+              text-align: center;
+            "
+          ></div>
+          <div id="slide-caption-box" class="slide-caption-box">
+            <label class="label" style="margin-bottom: 4px"
+              >Legenda do Post</label
+            >
+            <textarea
+              id="slide-caption-input"
+              class="input slide-caption-input"
+              rows="3"
+              placeholder="Escreva a legenda deste slide/post"
+            ></textarea>
+            <div
+              style="display: flex; gap: 6px; margin-top: 6px; flex-shrink: 0"
+            >
+              <button id="btn-copy-slide-caption" class="btn btn-ghost btn-sm">
+                Copiar Legenda
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Layers panel -->
+        <div id="layers-panel">
+          <div class="layers-header">
+            <span class="layers-title">Camadas</span>
+            <div style="display: flex; gap: 4px">
+              <button
+                id="btn-toggle-layers-list"
+                class="btn btn-ghost btn-sm btn-icon"
+                title="Mostrar/ocultar lista de camadas"
+              >
+                ☰
+              </button>
+              <button
+                id="btn-layer-up"
+                class="btn btn-ghost btn-sm btn-icon"
+                title="Mover para cima"
+              >
+                ↑
+              </button>
+              <button
+                id="btn-layer-down"
+                class="btn btn-ghost btn-sm btn-icon"
+                title="Mover para baixo"
+              >
+                ↓
+              </button>
+            </div>
+          </div>
+          <div id="layers-list" class="layers-list">
+            <!-- Rendered by app -->
+          </div>
+        </div>
+      </main>

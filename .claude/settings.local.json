@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l \"c:\\\\Users\\\\Henrique da Cruz\\\\source\\\\repos\\\\postGenerate/js/\"*.js \"c:\\\\Users\\\\Henrique da Cruz\\\\source\\\\repos\\\\postGenerate/js/controllers/\"*.js \"c:\\\\Users\\\\Henrique da Cruz\\\\source\\\\repos\\\\postGenerate/js/services/\"*.js)",
+      "Bash(wc -l \"c:\\\\Users\\\\Henrique da Cruz\\\\source\\\\repos\\\\postGenerate\\\\html\\\\partials/\"*.html)",
+      "Bash(wc -l html/partials/*.html)",
+      "Bash(grep -v \"^\\\\s*//\")",
+      "Bash(grep -n \"display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px\" \"/c/Users/Henrique da Cruz/source/repos/postGenerate/html/partials\"/*.html)",
+      "Bash(grep -r \"display: flex\" \"/c/Users/Henrique da Cruz/source/repos/postGenerate/html/partials\"/*.html)",
+      "Bash(grep -n \"font-size: 13px\" \"/c/Users/Henrique da Cruz/source/repos/postGenerate/html/partials/\"*.html)",
+      "Bash(python -c ':*)"
+    ]
+  }
+}

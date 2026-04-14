@@ -18,7 +18,16 @@ import { getFormat } from "./formats.js";
 export { ANIM_DEFAULTS };
 
 /* ── Re-export factories for external use ─────────────── */
-export { createDefaultState, makeBadgeLayer, makeHeadlineLayer, makeSubLayer, makeTextLayer, makeImageLayer, makeIconLayer, makeShapeLayer };
+export {
+  createDefaultState,
+  makeBadgeLayer,
+  makeHeadlineLayer,
+  makeSubLayer,
+  makeTextLayer,
+  makeImageLayer,
+  makeIconLayer,
+  makeShapeLayer,
+};
 
 /* ── Canvas Engine ──────────────────────────────────────── */
 export class CanvasEngine {
@@ -48,7 +57,10 @@ export class CanvasEngine {
 
   setState(state) {
     const prevFormatId = this._state.formatId;
-    this._state = structuredClone(state);
+    const fallback = this._state?.formatId
+      ? createDefaultState(this._state.formatId)
+      : createDefaultState();
+    this._state = this._normalizeIncomingState(state, fallback);
     this._selectedIds.clear();
     this.render();
     if (this._state.formatId !== prevFormatId) {
@@ -59,7 +71,15 @@ export class CanvasEngine {
   }
 
   updateBackground(patch) {
+    this._state.background = this._normalizeBackground(
+      this._state.background,
+      createDefaultState(this._state.formatId).background,
+    );
     Object.assign(this._state.background, patch);
+    this._state.background = this._normalizeBackground(
+      this._state.background,
+      createDefaultState(this._state.formatId).background,
+    );
     this._renderBackground();
     this._emit("stateChange", this._state);
   }
@@ -98,11 +118,19 @@ export class CanvasEngine {
   groupSelectedLayers() {
     const ids = [...this._selectedIds];
     if (ids.length < 2) return null;
-    const layers = this._state.layers.filter(l => ids.includes(l.id));
-    const minX = Math.min(...layers.map(l => l.x ?? 0));
-    const minY = Math.min(...layers.map(l => l.y ?? 0));
-    const maxX = Math.max(...layers.map(l => (l.x ?? 0) + (l.width === "auto" ? 0 : (l.width ?? 0))));
-    const maxY = Math.max(...layers.map(l => (l.y ?? 0) + (l.height === "auto" ? 0 : (l.height ?? 0))));
+    const layers = this._state.layers.filter((l) => ids.includes(l.id));
+    const minX = Math.min(...layers.map((l) => l.x ?? 0));
+    const minY = Math.min(...layers.map((l) => l.y ?? 0));
+    const maxX = Math.max(
+      ...layers.map(
+        (l) => (l.x ?? 0) + (l.width === "auto" ? 0 : (l.width ?? 0)),
+      ),
+    );
+    const maxY = Math.max(
+      ...layers.map(
+        (l) => (l.y ?? 0) + (l.height === "auto" ? 0 : (l.height ?? 0)),
+      ),
+    );
     this.snapshot();
     const groupId = uuid();
     const group = {
@@ -116,10 +144,10 @@ export class CanvasEngine {
       y: minY,
       width: maxX - minX,
       height: maxY - minY,
-      children: layers.map(l => ({ ...l })),
+      children: layers.map((l) => ({ ...l })),
       ...ANIM_DEFAULTS,
     };
-    this._state.layers = this._state.layers.filter(l => !ids.includes(l.id));
+    this._state.layers = this._state.layers.filter((l) => !ids.includes(l.id));
     this._state.layers.push(group);
     this._selectedIds.clear();
     this._selectedIds.add(groupId);
@@ -130,17 +158,17 @@ export class CanvasEngine {
   }
 
   ungroupLayer(groupId) {
-    const group = this._state.layers.find(l => l.id === groupId);
+    const group = this._state.layers.find((l) => l.id === groupId);
     if (!group || group.type !== "group") return;
     this.snapshot();
     const children = group.children ?? [];
-    this._state.layers = this._state.layers.filter(l => l.id !== groupId);
-    children.forEach(child => {
+    this._state.layers = this._state.layers.filter((l) => l.id !== groupId);
+    children.forEach((child) => {
       const restored = { ...child, id: uuid() };
       this._state.layers.push(restored);
     });
     this._selectedIds.clear();
-    children.forEach(c => this._selectedIds.add(c.id));
+    children.forEach((c) => this._selectedIds.add(c.id));
     this.render();
     this._emit("layersChange", this._state.layers);
     this._emit("stateChange", this._state);
@@ -148,7 +176,7 @@ export class CanvasEngine {
 
   removeSelectedLayers() {
     const ids = [...this._selectedIds];
-    ids.forEach(id => {
+    ids.forEach((id) => {
       const idx = this._state.layers.findIndex((l) => l.id === id);
       if (idx !== -1) this._state.layers.splice(idx, 1);
     });
@@ -186,34 +214,41 @@ export class CanvasEngine {
     const layers = this.getSelectedLayers();
     if (layers.length < 1) return;
     const fmt = getFormat(this._state.formatId);
-    const cw = fmt.width, ch = fmt.height;
+    const cw = fmt.width,
+      ch = fmt.height;
     if (direction === "left") {
-      const minX = Math.min(...layers.map(l => l.x ?? 0));
-      layers.forEach(l => this.updateLayer(l.id, { x: minX }));
+      const minX = Math.min(...layers.map((l) => l.x ?? 0));
+      layers.forEach((l) => this.updateLayer(l.id, { x: minX }));
     } else if (direction === "centerH") {
-      const avgX = layers.reduce((sum, l) => sum + (l.x ?? 0), 0) / layers.length;
-      layers.forEach(l => this.updateLayer(l.id, { x: avgX }));
+      const avgX =
+        layers.reduce((sum, l) => sum + (l.x ?? 0), 0) / layers.length;
+      layers.forEach((l) => this.updateLayer(l.id, { x: avgX }));
     } else if (direction === "right") {
-      const maxX = Math.max(...layers.map(l => {
-        const w = l.width ?? (l.type === "icon" ? l.size : 20);
-        return (l.x ?? 0) + w;
-      }));
-      layers.forEach(l => {
+      const maxX = Math.max(
+        ...layers.map((l) => {
+          const w = l.width ?? (l.type === "icon" ? l.size : 20);
+          return (l.x ?? 0) + w;
+        }),
+      );
+      layers.forEach((l) => {
         const w = l.width ?? (l.type === "icon" ? l.size : 20);
         this.updateLayer(l.id, { x: maxX - w });
       });
     } else if (direction === "top") {
-      const minY = Math.min(...layers.map(l => l.y ?? 0));
-      layers.forEach(l => this.updateLayer(l.id, { y: minY }));
+      const minY = Math.min(...layers.map((l) => l.y ?? 0));
+      layers.forEach((l) => this.updateLayer(l.id, { y: minY }));
     } else if (direction === "centerV") {
-      const avgY = layers.reduce((sum, l) => sum + (l.y ?? 0), 0) / layers.length;
-      layers.forEach(l => this.updateLayer(l.id, { y: avgY }));
+      const avgY =
+        layers.reduce((sum, l) => sum + (l.y ?? 0), 0) / layers.length;
+      layers.forEach((l) => this.updateLayer(l.id, { y: avgY }));
     } else if (direction === "bottom") {
-      const maxY = Math.max(...layers.map(l => {
-        const h = l.height ?? (l.type === "icon" ? l.size : 10);
-        return (l.y ?? 0) + h;
-      }));
-      layers.forEach(l => {
+      const maxY = Math.max(
+        ...layers.map((l) => {
+          const h = l.height ?? (l.type === "icon" ? l.size : 10);
+          return (l.y ?? 0) + h;
+        }),
+      );
+      layers.forEach((l) => {
         const h = l.height ?? (l.type === "icon" ? l.size : 10);
         this.updateLayer(l.id, { y: maxY - h });
       });
@@ -231,7 +266,10 @@ export class CanvasEngine {
       const space = (maxX - minX - totalW) / (sorted.length - 1);
       let curX = minX;
       sorted.forEach((l, i) => {
-        if (i === 0) { curX = l.x ?? 0; return; }
+        if (i === 0) {
+          curX = l.x ?? 0;
+          return;
+        }
         if (i === sorted.length - 1) return;
         curX += (l.width ?? 10) + space;
         this.updateLayer(l.id, { x: curX });
@@ -244,7 +282,10 @@ export class CanvasEngine {
       const space = (maxY - minY - totalH) / (sorted.length - 1);
       let curY = minY;
       sorted.forEach((l, i) => {
-        if (i === 0) { curY = l.y ?? 0; return; }
+        if (i === 0) {
+          curY = l.y ?? 0;
+          return;
+        }
         if (i === sorted.length - 1) return;
         curY += (l.height ?? 10) + space;
         this.updateLayer(l.id, { y: curY });
@@ -280,10 +321,18 @@ export class CanvasEngine {
       if (id) this._selectedIds.add(id);
     }
     this._el.querySelectorAll(".pg-layer").forEach((el) => {
-      el.classList.toggle("pg-layer--selected", this._selectedIds.has(el.dataset.layerId));
+      el.classList.toggle(
+        "pg-layer--selected",
+        this._selectedIds.has(el.dataset.layerId),
+      );
     });
-    const layers = this._state.layers.filter((l) => this._selectedIds.has(l.id));
-    this._emit("selectionChange", layers.length === 1 ? layers[0] : layers.length > 1 ? layers : null);
+    const layers = this._state.layers.filter((l) =>
+      this._selectedIds.has(l.id),
+    );
+    this._emit(
+      "selectionChange",
+      layers.length === 1 ? layers[0] : layers.length > 1 ? layers : null,
+    );
   }
 
   getSelectedLayers() {
@@ -308,7 +357,7 @@ export class CanvasEngine {
   }
 
   selectAllLayers() {
-    this._state.layers.forEach(l => this._selectedIds.add(l.id));
+    this._state.layers.forEach((l) => this._selectedIds.add(l.id));
     this._el.querySelectorAll(".pg-layer").forEach((el) => {
       el.classList.add("pg-layer--selected");
     });
@@ -373,10 +422,11 @@ export class CanvasEngine {
   }
 
   _renderSafeAreaGuides(show = false) {
-    this._el.querySelectorAll(".pg-safe-area").forEach(el => el.remove());
+    this._el.querySelectorAll(".pg-safe-area").forEach((el) => el.remove());
     if (!show) return;
     const fmt = getFormat(this._state.formatId);
-    const cw = fmt.width, ch = fmt.height;
+    const cw = fmt.width,
+      ch = fmt.height;
     const overlay = document.createElement("div");
     overlay.className = "pg-safe-area";
     overlay.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden;`;
@@ -384,7 +434,7 @@ export class CanvasEngine {
       { top: 0, height: ch * 0.14, label: "Stories safe zone" },
       { top: ch * 0.86, height: ch * 0.14, label: "" },
     ];
-    zones.forEach(z => {
+    zones.forEach((z) => {
       const d = document.createElement("div");
       d.style.cssText = `position:absolute;top:${z.top}px;left:0;right:0;height:${z.height}px;border:1px dashed rgba(255,100,100,0.5);background:rgba(255,0,0,0.03);`;
       overlay.appendChild(d);
@@ -417,27 +467,56 @@ export class CanvasEngine {
         const newY = this._dragState.startLayerY + (dy / ch) * 100;
         this.updateLayer(this._dragState.layerId, { x: newX, y: newY });
       } else if (this._resizeState) {
-        const { handle, startX, startY, startW, startH, startLayerX, startLayerY, layer } = this._resizeState;
+        const {
+          handle,
+          startX,
+          startY,
+          startW,
+          startH,
+          startLayerX,
+          startLayerY,
+          layer,
+        } = this._resizeState;
         const dx = (mx - startX) * scaleX;
         const dy = (my - startY) * scaleY;
         const dwPct = (dx / cw) * 100;
         const dhPct = (dy / ch) * 100;
-        let newX = startLayerX, newY = startLayerY, newW = startW, newH = startH;
+        let newX = startLayerX,
+          newY = startLayerY,
+          newW = startW,
+          newH = startH;
         const lockRatio = layer._lockRatio ?? false;
         const ratio = startW / (startH || 1);
 
-        if (handle.includes("w")) { newX = startLayerX + dwPct; newW = Math.max(1, startW - dwPct); }
-        if (handle.includes("e")) { newW = Math.max(1, startW + dwPct); }
-        if (handle.includes("n")) { newY = startLayerY + dhPct; newH = Math.max(1, startH - dhPct); }
-        if (handle.includes("s")) { newH = Math.max(1, startH + dhPct); }
+        if (handle.includes("w")) {
+          newX = startLayerX + dwPct;
+          newW = Math.max(1, startW - dwPct);
+        }
+        if (handle.includes("e")) {
+          newW = Math.max(1, startW + dwPct);
+        }
+        if (handle.includes("n")) {
+          newY = startLayerY + dhPct;
+          newH = Math.max(1, startH - dhPct);
+        }
+        if (handle.includes("s")) {
+          newH = Math.max(1, startH + dhPct);
+        }
 
         if (lockRatio) {
           if (handle === "e" || handle === "w") newH = newW / ratio;
           else if (handle === "n" || handle === "s") newW = newH * ratio;
-          else { newH = newW / ratio; }
+          else {
+            newH = newW / ratio;
+          }
         }
 
-        this.updateLayer(this._resizeState.layerId, { x: newX, y: newY, width: newW, height: newH });
+        this.updateLayer(this._resizeState.layerId, {
+          x: newX,
+          y: newY,
+          width: newW,
+          height: newH,
+        });
       }
     };
 
@@ -491,37 +570,82 @@ export class CanvasEngine {
   }
 
   _renderResizeHandles() {
-    this._el.querySelectorAll(".pg-resize-handle").forEach(el => el.remove());
+    this._el.querySelectorAll(".pg-resize-handle").forEach((el) => el.remove());
     if (this._selectedIds.size !== 1) return;
     const layerId = [...this._selectedIds][0];
-    const layer = this._state.layers.find(l => l.id === layerId);
+    const layer = this._state.layers.find((l) => l.id === layerId);
     if (!layer || layer.locked) return;
     if (layer.type === "text" && layer.width === "auto") return;
     const fmt = getFormat(this._state.formatId);
-    const cw = fmt.width, ch = fmt.height;
+    const cw = fmt.width,
+      ch = fmt.height;
     const x = ((layer.x ?? 0) * cw) / 100;
     const y = ((layer.y ?? 0) * ch) / 100;
-    const w = ((layer.width ?? (layer.type === "icon" ? layer.size : 20)) * cw) / 100;
-    const h = ((layer.height ?? (layer.type === "icon" ? layer.size : 10)) * ch) / 100;
+    const w =
+      ((layer.width ?? (layer.type === "icon" ? layer.size : 20)) * cw) / 100;
+    const h =
+      ((layer.height ?? (layer.type === "icon" ? layer.size : 10)) * ch) / 100;
     const handleSize = 8;
     const positions = [
-      { h: "nw", x: x - handleSize / 2, y: y - handleSize / 2, cur: "nwse-resize" },
-      { h: "n", x: x + w / 2 - handleSize / 2, y: y - handleSize / 2, cur: "ns-resize" },
-      { h: "ne", x: x + w - handleSize / 2, y: y - handleSize / 2, cur: "nesw-resize" },
-      { h: "e", x: x + w - handleSize / 2, y: y + h / 2 - handleSize / 2, cur: "ew-resize" },
-      { h: "se", x: x + w - handleSize / 2, y: y + h - handleSize / 2, cur: "nwse-resize" },
-      { h: "s", x: x + w / 2 - handleSize / 2, y: y + h - handleSize / 2, cur: "ns-resize" },
-      { h: "sw", x: x - handleSize / 2, y: y + h - handleSize / 2, cur: "nesw-resize" },
-      { h: "w", x: x - handleSize / 2, y: y + h / 2 - handleSize / 2, cur: "ew-resize" },
+      {
+        h: "nw",
+        x: x - handleSize / 2,
+        y: y - handleSize / 2,
+        cur: "nwse-resize",
+      },
+      {
+        h: "n",
+        x: x + w / 2 - handleSize / 2,
+        y: y - handleSize / 2,
+        cur: "ns-resize",
+      },
+      {
+        h: "ne",
+        x: x + w - handleSize / 2,
+        y: y - handleSize / 2,
+        cur: "nesw-resize",
+      },
+      {
+        h: "e",
+        x: x + w - handleSize / 2,
+        y: y + h / 2 - handleSize / 2,
+        cur: "ew-resize",
+      },
+      {
+        h: "se",
+        x: x + w - handleSize / 2,
+        y: y + h - handleSize / 2,
+        cur: "nwse-resize",
+      },
+      {
+        h: "s",
+        x: x + w / 2 - handleSize / 2,
+        y: y + h - handleSize / 2,
+        cur: "ns-resize",
+      },
+      {
+        h: "sw",
+        x: x - handleSize / 2,
+        y: y + h - handleSize / 2,
+        cur: "nesw-resize",
+      },
+      {
+        h: "w",
+        x: x - handleSize / 2,
+        y: y + h / 2 - handleSize / 2,
+        cur: "ew-resize",
+      },
     ];
-    positions.forEach(pos => {
+    positions.forEach((pos) => {
       const handle = document.createElement("div");
       handle.className = "pg-resize-handle";
       handle.dataset.handle = pos.h;
       handle.style.cssText = `position:absolute;width:${handleSize}px;height:${handleSize}px;background:#7bc4ec;border:1px solid #fff;border-radius:2px;cursor:${pos.cur};z-index:10;`;
       handle.style.left = pos.x + "px";
       handle.style.top = pos.y + "px";
-      handle.addEventListener("mousedown", (e) => this._startResize(pos.h, layer, e));
+      handle.addEventListener("mousedown", (e) =>
+        this._startResize(pos.h, layer, e),
+      );
       this._el.appendChild(handle);
     });
   }
@@ -546,8 +670,14 @@ export class CanvasEngine {
     };
     el.addEventListener("blur", finish, { once: true });
     el.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); el.blur(); }
-      if (e.key === "Escape") { el.textContent = layer.content; el.blur(); }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        el.blur();
+      }
+      if (e.key === "Escape") {
+        el.textContent = layer.content;
+        el.blur();
+      }
     });
   }
 
@@ -558,7 +688,7 @@ export class CanvasEngine {
     this._el.style.height = fmt.height + "px";
 
     this._el.querySelectorAll(".pg-layer").forEach((el) => el.remove());
-    this._el.querySelectorAll(".pg-resize-handle").forEach(el => el.remove());
+    this._el.querySelectorAll(".pg-resize-handle").forEach((el) => el.remove());
     this._renderBackground();
 
     this._state.layers.forEach((layer) => {
@@ -578,7 +708,12 @@ export class CanvasEngine {
       bgEl.style.cssText = "position:absolute;inset:0;pointer-events:none;";
       this._el.prepend(bgEl);
     }
-    const bg = this._state.background;
+    const bg = this._normalizeBackground(
+      this._state.background,
+      createDefaultState(this._state.formatId).background,
+    );
+    this._state.background = bg;
+    if (!bg) return;
     if (bg.type === "solid") {
       bgEl.style.background = bg.color;
     } else if (bg.type === "gradient") {
@@ -606,6 +741,72 @@ export class CanvasEngine {
     }
   }
 
+  _normalizeIncomingState(state, fallbackState) {
+    const next =
+      state && typeof state === "object"
+        ? structuredClone(state)
+        : structuredClone(fallbackState);
+    if (!next.formatId) next.formatId = fallbackState.formatId;
+    if (!Array.isArray(next.layers)) next.layers = [];
+    next.background = this._normalizeBackground(
+      next.background,
+      fallbackState.background,
+    );
+    return next;
+  }
+
+  _normalizeBackground(bg, fallbackBg) {
+    const fb = fallbackBg && typeof fallbackBg === "object" ? fallbackBg : {};
+    const source = bg && typeof bg === "object" ? bg : fb;
+    const type = source.type || fb.type || "solid";
+    if (type === "gradient") {
+      const fg = fb.gradient ?? {};
+      const g = source.gradient ?? {};
+      return {
+        ...fb,
+        ...source,
+        type: "gradient",
+        gradient: {
+          type: g.type ?? fg.type ?? "linear",
+          from: g.from ?? fg.from ?? "#000000",
+          to: g.to ?? fg.to ?? "#0e1a2e",
+          angle: Number.isFinite(g.angle) ? g.angle : (fg.angle ?? 135),
+          reach: Number.isFinite(g.reach) ? g.reach : (fg.reach ?? 100),
+          fromReach: Number.isFinite(g.fromReach)
+            ? g.fromReach
+            : (fg.fromReach ?? 0),
+          toReach: Number.isFinite(g.toReach) ? g.toReach : (fg.toReach ?? 100),
+          opacity: Number.isFinite(g.opacity) ? g.opacity : (fg.opacity ?? 100),
+          fromOpacity: Number.isFinite(g.fromOpacity)
+            ? g.fromOpacity
+            : Number.isFinite(g.opacity)
+              ? g.opacity
+              : (fg.fromOpacity ?? fg.opacity ?? 100),
+          toOpacity: Number.isFinite(g.toOpacity)
+            ? g.toOpacity
+            : Number.isFinite(g.opacity)
+              ? g.opacity
+              : (fg.toOpacity ?? fg.opacity ?? 100),
+        },
+      };
+    }
+    if (type === "image") {
+      return {
+        ...fb,
+        ...source,
+        type: "image",
+        image: source.image ?? fb.image ?? null,
+        imageSize: source.imageSize ?? fb.imageSize ?? "cover",
+      };
+    }
+    return {
+      ...fb,
+      ...source,
+      type: "solid",
+      color: source.color ?? fb.color ?? "#000000",
+    };
+  }
+
   _renderLayer(layer) {
     const fmt = getFormat(this._state.formatId);
     const existing = this._el.querySelector(`[data-layer-id="${layer.id}"]`);
@@ -628,6 +829,9 @@ export class CanvasEngine {
 
     const x = ((layer.x ?? 0) * cw) / 100;
     const y = ((layer.y ?? 0) * ch) / 100;
+    const rotation = layer.rotation ?? 0;
+    const flipH = layer.flipH ? -1 : 1;
+    const flipV = layer.flipV ? -1 : 1;
     el.style.cssText = `
       position: absolute;
       left: ${x}px;
@@ -635,6 +839,8 @@ export class CanvasEngine {
       opacity: ${layer.opacity ?? 1};
       cursor: pointer;
       will-change: transform, opacity, filter;
+      transform: rotate(${rotation}deg) scaleX(${flipH}) scaleY(${flipV});
+      transform-origin: center center;
     `;
 
     if (
@@ -661,12 +867,12 @@ export class CanvasEngine {
         el.style.minHeight = "24px";
       } else {
         const children = layer.children ?? [];
-        children.forEach(child => {
+        children.forEach((child) => {
           const childEl = this._buildLayerEl(child, cw, ch);
           childEl.style.position = "relative";
           childEl.style.left = "0";
           childEl.style.top = "0";
-          childEl.style.transform = `translate(${(child.x - layer.x) * cw / 100}px, ${(child.y - layer.y) * ch / 100}px)`;
+          childEl.style.transform = `translate(${((child.x - layer.x) * cw) / 100}px, ${((child.y - layer.y) * ch) / 100}px)`;
           el.appendChild(childEl);
         });
       }
@@ -786,7 +992,11 @@ export class CanvasEngine {
       img.style.transform = `scale(${Math.max(0.2, Math.min(4, layer.imageZoom ?? 1))})`;
       img.style.transformOrigin = "center center";
       img.style.pointerEvents = "none";
-      const hasCrop = layer.cropX != null || layer.cropY != null || layer.cropW != null || layer.cropH != null;
+      const hasCrop =
+        layer.cropX != null ||
+        layer.cropY != null ||
+        layer.cropW != null ||
+        layer.cropH != null;
       if (hasCrop) {
         const cropX = layer.cropX ?? 0;
         const cropY = layer.cropY ?? 0;

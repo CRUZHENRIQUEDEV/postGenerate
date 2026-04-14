@@ -10,14 +10,30 @@ export class AnimEngine {
     await this._canvas.playAnimations();
   }
 
+  async _loadScript(url) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = url;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error(`Falha ao carregar: ${url}`));
+      document.head.appendChild(s);
+    });
+  }
+
   async exportGIF({
     fps = 10,
     filename = "post-animado.gif",
     download = true,
     qualityScale = 1,
   } = {}) {
+    if (!window.html2canvas) {
+      await this._loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+    }
+    if (!window.gifshot) {
+      await this._loadScript("https://cdnjs.cloudflare.com/ajax/libs/gifshot/0.4.5/gifshot.min.js");
+    }
     if (!window.gifshot || !window.html2canvas) {
-      throw new Error("Dependências de GIF não carregadas.");
+      throw new Error("Dependências de GIF não carregadas. Verifique sua conexão com a internet.");
     }
     const state = this._canvas.getState?.();
     const fmt = state?.formatId ? getFormat(state.formatId) : null;
