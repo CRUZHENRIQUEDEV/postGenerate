@@ -46,6 +46,7 @@ export class CanvasEngine {
     this._dragState = null; // { layerId, startX, startY, startLayerX, startLayerY }
     this._resizeState = null; // { handle, startX, startY, startW, startH, startLayerX, startLayerY }
     this._editingText = null; // { layerId, el }
+    this._bulkUpdating = false;
     injectAnimCSS();
     this._wireCanvasDrag();
   }
@@ -71,6 +72,7 @@ export class CanvasEngine {
   }
 
   updateBackground(patch) {
+    this.snapshot();
     this._state.background = this._normalizeBackground(
       this._state.background,
       createDefaultState(this._state.formatId).background,
@@ -94,6 +96,7 @@ export class CanvasEngine {
   }
 
   addLayer(layer) {
+    this.snapshot();
     this._state.layers.push(layer);
     this.render();
     this.selectLayer(layer.id);
@@ -102,6 +105,7 @@ export class CanvasEngine {
   }
 
   removeLayer(id) {
+    this.snapshot();
     const idx = this._state.layers.findIndex((l) => l.id === id);
     if (idx === -1) return;
     this._state.layers.splice(idx, 1);
@@ -175,6 +179,7 @@ export class CanvasEngine {
   }
 
   removeSelectedLayers() {
+    this.snapshot();
     const ids = [...this._selectedIds];
     ids.forEach((id) => {
       const idx = this._state.layers.findIndex((l) => l.id === id);
@@ -188,6 +193,7 @@ export class CanvasEngine {
   }
 
   moveLayer(id, direction) {
+    this.snapshot();
     const layers = this._state.layers;
     const idx = layers.findIndex((l) => l.id === id);
     if (idx === -1) return;
@@ -200,6 +206,7 @@ export class CanvasEngine {
   }
 
   moveLayerByIndex(fromIdx, toIdx) {
+    this.snapshot();
     const layers = this._state.layers;
     if (fromIdx < 0 || fromIdx >= layers.length) return;
     if (toIdx < 0 || toIdx >= layers.length) return;
@@ -213,90 +220,103 @@ export class CanvasEngine {
   alignSelectedLayers(direction) {
     const layers = this.getSelectedLayers();
     if (layers.length < 1) return;
+    this.snapshot();
+    this._bulkUpdating = true;
     const fmt = getFormat(this._state.formatId);
     const cw = fmt.width,
       ch = fmt.height;
-    if (direction === "left") {
-      const minX = Math.min(...layers.map((l) => l.x ?? 0));
-      layers.forEach((l) => this.updateLayer(l.id, { x: minX }));
-    } else if (direction === "centerH") {
-      const avgX =
-        layers.reduce((sum, l) => sum + (l.x ?? 0), 0) / layers.length;
-      layers.forEach((l) => this.updateLayer(l.id, { x: avgX }));
-    } else if (direction === "right") {
-      const maxX = Math.max(
-        ...layers.map((l) => {
+    try {
+      if (direction === "left") {
+        const minX = Math.min(...layers.map((l) => l.x ?? 0));
+        layers.forEach((l) => this.updateLayer(l.id, { x: minX }));
+      } else if (direction === "centerH") {
+        const avgX =
+          layers.reduce((sum, l) => sum + (l.x ?? 0), 0) / layers.length;
+        layers.forEach((l) => this.updateLayer(l.id, { x: avgX }));
+      } else if (direction === "right") {
+        const maxX = Math.max(
+          ...layers.map((l) => {
+            const w = l.width ?? (l.type === "icon" ? l.size : 20);
+            return (l.x ?? 0) + w;
+          }),
+        );
+        layers.forEach((l) => {
           const w = l.width ?? (l.type === "icon" ? l.size : 20);
-          return (l.x ?? 0) + w;
-        }),
-      );
-      layers.forEach((l) => {
-        const w = l.width ?? (l.type === "icon" ? l.size : 20);
-        this.updateLayer(l.id, { x: maxX - w });
-      });
-    } else if (direction === "top") {
-      const minY = Math.min(...layers.map((l) => l.y ?? 0));
-      layers.forEach((l) => this.updateLayer(l.id, { y: minY }));
-    } else if (direction === "centerV") {
-      const avgY =
-        layers.reduce((sum, l) => sum + (l.y ?? 0), 0) / layers.length;
-      layers.forEach((l) => this.updateLayer(l.id, { y: avgY }));
-    } else if (direction === "bottom") {
-      const maxY = Math.max(
-        ...layers.map((l) => {
+          this.updateLayer(l.id, { x: maxX - w });
+        });
+      } else if (direction === "top") {
+        const minY = Math.min(...layers.map((l) => l.y ?? 0));
+        layers.forEach((l) => this.updateLayer(l.id, { y: minY }));
+      } else if (direction === "centerV") {
+        const avgY =
+          layers.reduce((sum, l) => sum + (l.y ?? 0), 0) / layers.length;
+        layers.forEach((l) => this.updateLayer(l.id, { y: avgY }));
+      } else if (direction === "bottom") {
+        const maxY = Math.max(
+          ...layers.map((l) => {
+            const h = l.height ?? (l.type === "icon" ? l.size : 10);
+            return (l.y ?? 0) + h;
+          }),
+        );
+        layers.forEach((l) => {
           const h = l.height ?? (l.type === "icon" ? l.size : 10);
-          return (l.y ?? 0) + h;
-        }),
-      );
-      layers.forEach((l) => {
-        const h = l.height ?? (l.type === "icon" ? l.size : 10);
-        this.updateLayer(l.id, { y: maxY - h });
-      });
+          this.updateLayer(l.id, { y: maxY - h });
+        });
+      }
+    } finally {
+      this._bulkUpdating = false;
     }
   }
 
   distributeSelectedLayers(direction) {
     const layers = this.getSelectedLayers();
     if (layers.length < 3) return;
+    this.snapshot();
+    this._bulkUpdating = true;
     const sorted = [...layers].sort((a, b) => (a.x ?? 0) - (b.x ?? 0));
-    if (direction === "horizontal") {
-      const minX = sorted[0].x ?? 0;
-      const maxX = sorted[sorted.length - 1].x ?? 0;
-      const totalW = sorted.reduce((sum, l) => sum + (l.width ?? 10), 0);
-      const space = (maxX - minX - totalW) / (sorted.length - 1);
-      let curX = minX;
-      sorted.forEach((l, i) => {
-        if (i === 0) {
-          curX = l.x ?? 0;
-          return;
-        }
-        if (i === sorted.length - 1) return;
-        curX += (l.width ?? 10) + space;
-        this.updateLayer(l.id, { x: curX });
-        curX += space;
-      });
-    } else if (direction === "vertical") {
-      const minY = sorted[0].y ?? 0;
-      const maxY = sorted[sorted.length - 1].y ?? 0;
-      const totalH = sorted.reduce((sum, l) => sum + (l.height ?? 10), 0);
-      const space = (maxY - minY - totalH) / (sorted.length - 1);
-      let curY = minY;
-      sorted.forEach((l, i) => {
-        if (i === 0) {
-          curY = l.y ?? 0;
-          return;
-        }
-        if (i === sorted.length - 1) return;
-        curY += (l.height ?? 10) + space;
-        this.updateLayer(l.id, { y: curY });
-        curY += space;
-      });
+    try {
+      if (direction === "horizontal") {
+        const minX = sorted[0].x ?? 0;
+        const maxX = sorted[sorted.length - 1].x ?? 0;
+        const totalW = sorted.reduce((sum, l) => sum + (l.width ?? 10), 0);
+        const space = (maxX - minX - totalW) / (sorted.length - 1);
+        let curX = minX;
+        sorted.forEach((l, i) => {
+          if (i === 0) {
+            curX = l.x ?? 0;
+            return;
+          }
+          if (i === sorted.length - 1) return;
+          curX += (l.width ?? 10) + space;
+          this.updateLayer(l.id, { x: curX });
+          curX += space;
+        });
+      } else if (direction === "vertical") {
+        const minY = sorted[0].y ?? 0;
+        const maxY = sorted[sorted.length - 1].y ?? 0;
+        const totalH = sorted.reduce((sum, l) => sum + (l.height ?? 10), 0);
+        const space = (maxY - minY - totalH) / (sorted.length - 1);
+        let curY = minY;
+        sorted.forEach((l, i) => {
+          if (i === 0) {
+            curY = l.y ?? 0;
+            return;
+          }
+          if (i === sorted.length - 1) return;
+          curY += (l.height ?? 10) + space;
+          this.updateLayer(l.id, { y: curY });
+          curY += space;
+        });
+      }
+    } finally {
+      this._bulkUpdating = false;
     }
   }
 
   duplicateLayer(id) {
     const src = this._state.layers.find((l) => l.id === id);
     if (!src) return;
+    this.snapshot();
     const clone = structuredClone(src);
     clone.id = uuid();
     clone.name = src.name + " (cópia)";
@@ -366,6 +386,7 @@ export class CanvasEngine {
   }
 
   setFormat(formatId) {
+    this.snapshot();
     this._state.formatId = formatId;
     this.render();
     this._emit("formatChange", formatId);
@@ -461,8 +482,20 @@ export class CanvasEngine {
       const scaleY = ch / (this._previewH || ch);
 
       if (this._dragState) {
-        const dx = (mx - this._dragState.startX) * scaleX;
-        const dy = (my - this._dragState.startY) * scaleY;
+        let dxPx = mx - this._dragState.startX;
+        let dyPx = my - this._dragState.startY;
+        if (e.shiftKey) {
+          if (!this._dragState.axisLock) {
+            this._dragState.axisLock =
+              Math.abs(dxPx) >= Math.abs(dyPx) ? "x" : "y";
+          }
+          if (this._dragState.axisLock === "x") dyPx = 0;
+          else dxPx = 0;
+        } else {
+          this._dragState.axisLock = null;
+        }
+        const dx = dxPx * scaleX;
+        const dy = dyPx * scaleY;
         const newX = this._dragState.startLayerX + (dx / cw) * 100;
         const newY = this._dragState.startLayerY + (dy / ch) * 100;
         this.updateLayer(this._dragState.layerId, { x: newX, y: newY });
@@ -541,12 +574,14 @@ export class CanvasEngine {
     const rect = this._el.getBoundingClientRect();
     const cw = getFormat(this._state.formatId).width;
     const ch = getFormat(this._state.formatId).height;
+    this.snapshot();
     this._dragState = {
       layerId: layer.id,
       startX: e.clientX - rect.left,
       startY: e.clientY - rect.top,
       startLayerX: layer.x ?? 0,
       startLayerY: layer.y ?? 0,
+      axisLock: null,
     };
   }
 
@@ -554,6 +589,7 @@ export class CanvasEngine {
     if (layer.locked) return;
     e.stopPropagation();
     e.preventDefault();
+    this.snapshot();
     const rect = this._el.getBoundingClientRect();
     this._resizeState = {
       handle,
